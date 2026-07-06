@@ -779,3 +779,42 @@ Next step:
 Technical decisions:
 
 - Keep the star prompt polite and secondary; the first priority is showing a working live demo and clear product value.
+
+## 2026-07-06: Repository Maturity Assets
+
+Problem or confusion:
+
+- The user wanted the public repository to look richer and more trustworthy for visitors who may star the project.
+- The repository still lacked screenshots, license, contribution guidance, security policy, and CI automation.
+
+Diagnosis:
+
+- `README.md` had the live demo but no visual screenshots or architecture/product-flow section.
+- There was no `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, or `.github/workflows/ci.yml`.
+- Google Chrome was available locally, so screenshots could be captured from the live Render deployment without adding screenshot tooling to the project.
+
+Changed:
+
+- Captured real live-site screenshots for Discover, Create, Dashboard, and About into `docs/screenshots/`.
+- Updated `README.md` with CI/license badges, screenshots, product flow, architecture, safety/privacy notes, roadmap, and repository docs links.
+- Added an MIT `LICENSE`.
+- Added `CONTRIBUTING.md` with setup, test commands, PR guidance, and product principles.
+- Added `SECURITY.md` with vulnerability reporting, secret-handling guidance, AI safety scope, and deployment security expectations.
+- Added GitHub Actions CI to run Django system checks, JavaScript syntax check, and the Django test suite.
+
+Worked:
+
+- The repository now has the common trust signals expected by GitHub visitors: screenshots, license, contribution path, security policy, and automated checks.
+
+Current status:
+
+- Changes are ready to verify locally and push to the public repository.
+
+Next step:
+
+- Run checks, then push the repository-maturity update to GitHub.
+
+Technical decisions:
+
+- Use real screenshots from the live Render app instead of mock images.
+- Use the MIT license as a simple permissive default for public portfolio-style sharing.

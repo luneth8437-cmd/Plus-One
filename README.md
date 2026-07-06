@@ -1,5 +1,8 @@
 # Plus One
 
+[![CI](https://github.com/luneth8437-cmd/Plus-One/actions/workflows/ci.yml/badge.svg?branch=deepseek-api)](https://github.com/luneth8437-cmd/Plus-One/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Plus One is an AI-assisted anonymous campus activity matcher. Create a temporary card, match with another student, chat briefly, and decide whether to meet.
 
 Live demo: https://plusone-ub3w.onrender.com/
@@ -21,6 +24,16 @@ Campus plans often fail because students do not know who is free right now, who 
 - WhiteNoise static serving
 - Gunicorn + Uvicorn
 
+## Screenshots
+
+| Discover | Create |
+| --- | --- |
+| ![Discover page](docs/screenshots/discover.png) | ![Create page](docs/screenshots/create.png) |
+
+| Dashboard | About |
+| --- | --- |
+| ![Dashboard page](docs/screenshots/dashboard.png) | ![About page](docs/screenshots/about.png) |
+
 ## Product Capabilities
 
 - Anonymous session identities with no registration or password.
@@ -38,6 +51,28 @@ Campus plans often fail because students do not know who is free right now, who 
 - `/posts/<id>/edit/` owner-only post editing and cancellation.
 - `/dashboard/` dashboard for active, matched, expired, and cancelled posts.
 - `/chat/<match_id>/` five-minute anonymous chat with near-real-time message refresh and meet handoff.
+
+## Product Flow
+
+```text
+Create a temporary card
+  -> Review structured details
+  -> Publish to Discover
+  -> Another anonymous user shows interest
+  -> Match opens a short chat
+  -> Both users agree
+  -> Meet handoff appears with safety reminders
+```
+
+## Architecture
+
+```text
+Browser
+  -> Django templates + static CSS/JS
+  -> Django views, services, and selectors
+  -> PostgreSQL
+  -> DeepSeek API for parsing, icebreakers, and moderation
+```
 
 ## Setup
 
@@ -100,6 +135,29 @@ Run the baseline evaluation:
 ## Hosted Deployment
 
 To run one hosted instance that keeps `DEEPSEEK_API_KEY` on the server and lets other people use the app through a public URL, follow [DEPLOY_RENDER.md](DEPLOY_RENDER.md).
+
+## Repository Docs
+
+- [Deployment guide](DEPLOY_RENDER.md)
+- [Contributing guide](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [MIT license](LICENSE)
+
+## Safety and Privacy
+
+- No account signup is required for the core flow.
+- Anonymous browser sessions isolate each temporary identity.
+- Unsafe post drafts and chat messages are moderated before they are accepted.
+- The DeepSeek API key stays on the server through environment variables.
+- Production deployment does not seed demo users or demo posts.
+
+## Roadmap
+
+- Add real campus authentication or verified student email mode.
+- Add richer reporting and moderation review tools.
+- Add notification support for pending chats.
+- Add mobile-first polish for repeated daily use.
+- Add analytics for funnel health without exposing private chat content.
 
 ## Core Flow
 
