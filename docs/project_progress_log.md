@@ -903,3 +903,50 @@ Next step:
 Technical decisions:
 
 - Keep the demo as a concise storyboard-style GIF rather than a long screen recording, because the repository README needs fast scanning.
+
+## 2026-07-06: Product Validation Documentation Workspace
+
+Problem or confusion:
+
+- The product already had a working prototype, public demo, README screenshots, and a two-person flow GIF.
+- The next gap was evidence: user interviews, usability testing, product decisions, funnel metrics, AI evaluation results, and iteration case studies were not yet organized as reusable project artifacts.
+
+Diagnosis:
+
+- Resume and portfolio claims would be stronger if the repository showed how the product was validated, not only how it was implemented.
+- The validation work should not fabricate user quotes, metrics, or AI results before real testing happens.
+
+Changed:
+
+- Added `docs/product_validation/` with seven validation artifacts:
+  - user interview plan,
+  - mechanism comparison,
+  - usability test report,
+  - analytics event plan,
+  - AI evaluation results template,
+  - product decision log,
+  - iteration case studies.
+- Added README links to the new product validation workspace.
+
+Worked:
+
+- The repository now has a clear path for collecting real user evidence and turning it into product case-study material.
+- The templates explicitly mark unknown results as `TBD` instead of inventing data.
+
+Failed or abandoned:
+
+- Did not add fake interview results, fake analytics, or fake AI evaluation numbers.
+- Did not change app behavior, database schema, or UI code in this documentation pass.
+
+Current status:
+
+- Product validation docs are ready to use for interviews, usability tests, event planning, AI evaluation, decision review, and iteration writeups.
+
+Next step:
+
+- Conduct 5-8 real student interviews and 5-10 usability tests, then replace the placeholder rows with anonymized evidence.
+
+Technical decisions:
+
+- Keep validation artifacts in Markdown so they are readable on GitHub and easy to reuse in portfolio or resume material.
+- Keep private participant details out of the repository.

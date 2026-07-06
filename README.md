@@ -47,6 +47,18 @@ Campus plans often fail because students do not know who is free right now, who 
 - AI-assisted post parsing, icebreakers, and safety moderation with deterministic fallback.
 - Dashboard for active, matched, expired, and cancelled plans.
 
+## Product Validation
+
+Plus One includes a validation workspace for turning prototype feedback into product evidence:
+
+- [User interview plan](docs/product_validation/01_user_interviews.md)
+- [Mechanism comparison](docs/product_validation/02_mechanism_comparison.md)
+- [Usability test report](docs/product_validation/03_usability_test_report.md)
+- [Analytics event plan](docs/product_validation/04_analytics_event_plan.md)
+- [AI evaluation results template](docs/product_validation/05_ai_evaluation_results.md)
+- [Product decision log](docs/product_validation/06_product_decision_log.md)
+- [Iteration case studies](docs/product_validation/07_iteration_case_studies.md)
+
 ## Main Pages
 
 - `/` and `/discover/` discovery queue with filters, swipe actions, and match modal.
@@ -146,6 +158,7 @@ To run one hosted instance that keeps `DEEPSEEK_API_KEY` on the server and lets 
 - [Contributing guide](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 - [MIT license](LICENSE)
+- [Product validation workspace](docs/product_validation/README.md)
 
 ## Safety and Privacy
 
