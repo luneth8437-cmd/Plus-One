@@ -1217,3 +1217,50 @@ Technical decisions:
 
 - Keep direct quotes anonymized.
 - Keep role-play notes visible but separate from real interview evidence.
+
+## 2026-07-06: Expand Interview Evidence and Decision Log
+
+Problem or confusion:
+
+- The user provided a fuller interview record with detailed Q&A, cross-interview analysis, and product decisions derived from the interviews.
+- The existing interview document had a strong summary table, but did not yet preserve the detailed interview trail.
+- The product decision log had core MVP decisions, but not the newer interview-backed product decisions.
+
+Diagnosis:
+
+- The detailed Q&A improves interview readiness because it makes each insight traceable to a specific participant context and quote.
+- The decision log should explicitly connect interview evidence to product decisions such as activity-first positioning, specific card templates, productized safety, cold-start design, and AI as pressure reduction.
+
+Changed:
+
+- Expanded `docs/product_validation/01_user_interviews.md` with detailed Q&A records for all eight anonymized interviews.
+- Expanded the real interview synthesis with strongest use cases, core pain point, alternatives, anonymity stance, five-minute chat interpretation, trust signals, and product risks.
+- Added `Interview-Backed Product Decisions` to `docs/product_validation/06_product_decision_log.md`.
+- Updated `docs/product_validation/README.md` statuses for interview notes and decision log.
+
+Worked:
+
+- User research evidence is now traceable at three levels:
+  - participant-level Q&A,
+  - structured summary table,
+  - cross-interview synthesis.
+- Product decisions now cite interview evidence instead of reading like pure product intuition.
+
+Failed or abandoned:
+
+- Did not change product UI based on these decisions yet.
+- Did not update analytics, AI evaluation, or usability test documents in this step.
+
+Current status:
+
+- The Product Validation Pack now has stronger evidence for why Plus One should be activity-first, immediate, anonymous-but-bounded, one-to-one, and AI-assisted.
+- The next largest validation gap is still real usability testing of the live demo.
+
+Next step:
+
+- Convert these interview-backed decisions into concrete UX changes, especially first-screen positioning, empty state, activity-specific examples, visible safety cues, and AI drafting copy.
+
+Technical decisions:
+
+- Keep interview content anonymized.
+- Keep interview-derived product decisions separate from implementation tickets so the evidence chain stays readable.
