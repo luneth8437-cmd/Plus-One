@@ -1349,3 +1349,41 @@ Current status:
 Next step:
 
 - If needed, create a separate `research_hypotheses.md` later for brainstormed or simulated insights, clearly separated from real evidence.
+
+## 2026-07-06: Remove Simulated Content from Usability Test Report
+
+Problem or confusion:
+
+- The user wants `docs/product_validation/03_usability_test_report.md` to become a real usability testing artifact.
+- The file still contained earlier simulated pilot results and role-play product-use evidence.
+
+Diagnosis:
+
+- Simulated or role-play material should not live inside a document intended to hold real usability evidence.
+- The current report should remain a clean template until real 5-10 participant results are collected.
+
+Changed:
+
+- Removed `Simulated Pilot Results`.
+- Removed `Role-Play Product Use Evidence`.
+- Kept the test tasks, success metrics, participant result table, observation checklist, and synthesis placeholders.
+- Verified the file no longer contains `Simulated`, `Role-Play`, `synthetic`, `role-play`, `simulated`, `not real`, or `dry run` markers.
+
+Worked:
+
+- `03_usability_test_report.md` is now a clean real-usability-test report template.
+- It no longer mixes real validation structure with simulated evidence.
+
+Failed or abandoned:
+
+- Did not fill real participant data because that requires actual usability sessions.
+- Did not move simulated material into a separate hypothesis file because the user asked to delete simulated content.
+
+Current status:
+
+- The document is ready for real usability testing results.
+- Existing `TBD` rows are intentional placeholders for future real participants and metrics.
+
+Next step:
+
+- Run 5-10 user sessions on the live demo, then fill participant results, success metrics, top usability issues, highest-impact fix, and portfolio evidence.
