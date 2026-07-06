@@ -950,3 +950,42 @@ Technical decisions:
 
 - Keep validation artifacts in Markdown so they are readable on GitHub and easy to reuse in portfolio or resume material.
 - Keep private participant details out of the repository.
+
+## 2026-07-06: Simulated Interview and Usability Dry Run
+
+Problem or confusion:
+
+- The user wanted to simulate five students for interviews and usability testing before recruiting real participants.
+- The repository already warned not to fabricate real user evidence, so the simulated material needed clear labeling.
+
+Diagnosis:
+
+- Synthetic personas can help rehearse research questions and expose likely product issues.
+- Synthetic notes should not replace real validation or be presented as actual user quotes, metrics, or evidence.
+
+Changed:
+
+- Added a clearly labeled `Simulated Pilot Notes` section to `docs/product_validation/01_user_interviews.md`.
+- Added a clearly labeled `Simulated Pilot Results` section to `docs/product_validation/03_usability_test_report.md`.
+- Simulated five student perspectives across meals, study, sports, commuter time windows, and low-pressure language/coffee use cases.
+
+Worked:
+
+- The dry run produced concrete hypotheses around one-to-one positioning, time ambiguity, handoff wording, short-chat pressure, and Decline/Report separation.
+
+Failed or abandoned:
+
+- Did not overwrite the real participant tables.
+- Did not present simulated quotes or metrics as real research evidence.
+
+Current status:
+
+- The validation pack now supports both real data collection and pre-test simulation.
+
+Next step:
+
+- Recruit 5 real students and compare actual findings against the simulated hypotheses.
+
+Technical decisions:
+
+- Keep simulated data in separate labeled sections so future portfolio or README material can distinguish dry-run hypotheses from real validation.
