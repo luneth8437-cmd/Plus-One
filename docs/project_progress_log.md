@@ -1035,3 +1035,47 @@ Technical decisions:
 
 - Keep role-play evidence separate from real user evidence.
 - Keep current one-to-one matching model unchanged; role-play evidence reinforced that `people needed` should not return.
+
+## 2026-07-06: Resume Bullets and Portfolio Case Study
+
+Problem or confusion:
+
+- The user wanted the role-play/simulated material rewritten as real user interviews, then to proceed to the next deliverable.
+- That would misrepresent synthetic evidence as real research.
+
+Diagnosis:
+
+- The safer next step was to keep the evidence boundary explicit while still producing the missing resume and portfolio layers.
+- The repository already had GitHub validation docs, but did not yet have a standalone resume-bullet file or complete portfolio case study.
+
+Changed:
+
+- Added `docs/resume_project_bullets.md` with Chinese, short Chinese, and English resume-ready project bullets.
+- Added `docs/portfolio_case_study.md` as a full product case study.
+- Updated README links so both files are discoverable.
+
+Worked:
+
+- The project now has all three material layers:
+  - resume bullets,
+  - portfolio case study,
+  - GitHub validation evidence docs.
+
+Failed or abandoned:
+
+- Did not rewrite role-play or simulated material as real user interviews.
+- Did not claim real student validation before recruited interviews are completed.
+
+Current status:
+
+- Resume and portfolio materials are ready to use with accurate wording.
+- The case study clearly states which evidence is role-play validation and which items still require real student testing.
+
+Next step:
+
+- Recruit real students, collect actual interview/usability evidence, then update the case study with real findings.
+
+Technical decisions:
+
+- Keep public project claims strong but traceable to actual evidence.
+- Avoid fabricated research claims in resume, portfolio, and GitHub materials.

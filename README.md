@@ -51,6 +51,8 @@ Campus plans often fail because students do not know who is free right now, who 
 
 Plus One includes a validation workspace for turning prototype feedback into product evidence:
 
+- [Resume project bullets](docs/resume_project_bullets.md)
+- [Portfolio case study](docs/portfolio_case_study.md)
 - [User interview plan](docs/product_validation/01_user_interviews.md)
 - [Mechanism comparison](docs/product_validation/02_mechanism_comparison.md)
 - [Usability test report](docs/product_validation/03_usability_test_report.md)
@@ -155,6 +157,8 @@ To run one hosted instance that keeps `DEEPSEEK_API_KEY` on the server and lets 
 ## Repository Docs
 
 - [Deployment guide](DEPLOY_RENDER.md)
+- [Portfolio case study](docs/portfolio_case_study.md)
+- [Resume project bullets](docs/resume_project_bullets.md)
 - [Contributing guide](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 - [MIT license](LICENSE)
