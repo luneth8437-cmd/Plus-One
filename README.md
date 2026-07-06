@@ -26,6 +26,10 @@ Campus plans often fail because students do not know who is free right now, who 
 
 ## Screenshots
 
+### Full Flow Demo
+
+![Plus One full flow: create, match, chat, and agree to meet](docs/screenshots/plus-one-flow.gif)
+
 | Discover | Create |
 | --- | --- |
 | ![Discover page](docs/screenshots/discover.png) | ![Create page](docs/screenshots/create.png) |

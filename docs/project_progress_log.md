@@ -818,3 +818,46 @@ Technical decisions:
 
 - Use real screenshots from the live Render app instead of mock images.
 - Use the MIT license as a simple permissive default for public portfolio-style sharing.
+
+## 2026-07-06: Full Flow GIF for README
+
+Problem or confusion:
+
+- The user wanted a short GIF that demonstrates the complete product flow instead of only static screenshots.
+
+Diagnosis:
+
+- The existing README showed separate screenshots but did not communicate the end-to-end journey quickly.
+- Recording against production would create demo data in the live database, so a temporary local SQLite database was safer.
+
+Changed:
+
+- Started a temporary local Django server backed by `/tmp/plusone-gif.sqlite3`.
+- Automated two anonymous browser contexts through Chrome DevTools Protocol:
+  - create a temporary Plus One card,
+  - publish it,
+  - discover it from a second anonymous session,
+  - match,
+  - open chat,
+  - send a message,
+  - agree to meet,
+  - show the meet handoff and dashboard.
+- Generated `docs/screenshots/plus-one-flow.gif` from the captured frames with `ffmpeg`.
+- Added the GIF to the README under `Full Flow Demo`.
+
+Worked:
+
+- The GIF is about 519KB and uses real UI from the local app, without writing demo data to the production Render database.
+
+Current status:
+
+- README now includes an animated full-flow demonstration plus static page screenshots.
+
+Next step:
+
+- Push the README and GIF update to GitHub.
+
+Technical decisions:
+
+- Use a temporary local database for repeatable product demo recording.
+- Keep the GIF compact enough to load comfortably on the GitHub README.
