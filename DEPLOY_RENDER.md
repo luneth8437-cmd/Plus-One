@@ -46,6 +46,7 @@ Recommended path:
 
 - a Python web service named `plusone`,
 - a PostgreSQL database named `plusone-db`,
+- free instance plans for the first public test,
 - a generated `SECRET_KEY`,
 - `DJANGO_DEBUG=False`,
 - `DATABASE_URL` wired from the Render PostgreSQL database,
@@ -104,6 +105,8 @@ If you intentionally want a demo environment, run this manually in a non-product
 ```bash
 python manage.py seed_demo
 ```
+
+The free Render Postgres plan is suitable for launch testing, but it has platform limits and may expire according to Render's current free database policy. Upgrade the database before treating user data as durable.
 
 ## 7. Rotate the key later
 

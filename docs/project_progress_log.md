@@ -708,3 +708,38 @@ Technical decisions:
 
 - Keep Render as the documented first deployment path because the app already uses `DATABASE_URL`, PostgreSQL, WhiteNoise, Gunicorn, and Render hostname support.
 - Do not enable HSTS subdomain include or preload by default until the product uses a confirmed HTTPS-only custom domain.
+
+## 2026-07-06: Render Blueprint Free Plan Correction
+
+Problem or confusion:
+
+- Render showed `Payment Information Required` while creating the Blueprint.
+- The user wanted to deploy the first public test without unexpectedly selecting a paid instance.
+
+Diagnosis:
+
+- Render's Blueprint defaults use paid production-grade plans when `plan` is omitted.
+- The existing `render.yaml` did not set a plan for the web service or PostgreSQL database.
+
+Changed:
+
+- Set the web service plan to `free` in `render.yaml`.
+- Set the PostgreSQL database plan to `free` in `render.yaml`.
+- Reduced `WEB_CONCURRENCY` from `4` to `1` for the free web service memory profile.
+- Updated `DEPLOY_RENDER.md` to state that the Blueprint starts on free instance plans and that free Postgres is only suitable for launch testing.
+
+Worked:
+
+- The configuration now explicitly requests free Render resources for the first hosted test.
+
+Current status:
+
+- The GitHub branch should be updated before retrying the Render Blueprint flow.
+
+Next step:
+
+- Push the updated `render.yaml`, then retry Blueprint creation on Render from the `deepseek-api` branch.
+
+Technical decisions:
+
+- Prefer free Render resources for the first public validation, then upgrade the database before relying on durable user data.

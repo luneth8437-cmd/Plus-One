@@ -2,11 +2,13 @@ databases:
   - name: plusone-db
     databaseName: plusone
     user: plusone
+    plan: free
 
 services:
   - type: web
     name: plusone
     runtime: python
+    plan: free
     buildCommand: "./build.sh"
     startCommand: "python -m gunicorn config.asgi:application -k uvicorn.workers.UvicornWorker"
     envVars:
@@ -25,4 +27,4 @@ services:
       - key: PLUSONE_LLM_MODEL
         value: "deepseek-v4-flash"
       - key: WEB_CONCURRENCY
-        value: "4"
+        value: "1"
