@@ -1,4 +1,4 @@
-# User Interview Plan
+# User Interview Notes
 
 Goal: learn how students currently solve temporary companion problems before judging whether Plus One solves the right problem.
 
@@ -44,18 +44,20 @@ Reaction to Plus One:
 
 ## Participant Notes
 
-Replace these placeholders with real interviews. Do not include identifiable personal information.
+Date added: 2026-07-06
+
+Method: eight anonymized student interviews across meal, study, sports, safety-sensitive, exchange, event, and introverted-user contexts. Do not include identifiable personal information.
 
 | Participant | Use case | Current workaround | Main failure | Safety concern | Info needed before meeting | Representative quote | Product implication |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| P1 | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| P2 | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| P3 | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| P4 | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| P5 | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| P6 | Optional | TBD | TBD | TBD | TBD | TBD | TBD |
-| P7 | Optional | TBD | TBD | TBD | TBD | TBD | TBD |
-| P8 | Optional | TBD | TBD | TBD | TBD | TBD | TBD |
+| P1 | International student, meal companion | Has classmates but often does not know who is free after class | Wants lunch but avoids suddenly messaging many people | Anonymous lowers pressure, but they want verified student status without public names | Same place, normal behavior, punctuality, public campus setting | "我不是想交朋友，我只是今天不想一个人吃饭。" | Position Plus One around immediate low-pressure companionship, not friendship seeking. Add verified-student trust as a future launch requirement. |
+| P2 | Local German student, general campus activity | Usually asks existing friends directly | If friends are busy, they go alone | Less worried about anonymity than empty supply | Evidence that people are online and plans are active | "最大的问题不是匿名，而是有没有人在线。" | Cold start and live-card density are core product risks; empty states and launch seeding matter. |
+| P3 | Library-heavy student, study companion | Uses group chats or study contacts | Group chats are slow and often get no reply | Wants focused study intent, not casual chatting | Location, time, expected study duration | "我需要的是今天下午，不是未来一个学习群。" | Study cards should emphasize near-term time window, duration, and intent. |
+| P4 | Sports user | Asks friends or activity contacts | Friends' schedules often do not match | Needs to confirm practical details before meeting | Skill level, equipment, booked court or place | "我不是来聊天，我是来确认信息。" | Chat should support fast confirmation, not long conversation. Add activity-specific quick replies for sport details. |
+| P5 | Safety-sensitive user | Would consider anonymous posting but worries about unknown people | Anonymous makes posting easier but meeting less certain | Wants verified school status, report, decline, no automatic contact exposure | Public campus location, mutual chat, ability to end safely | "匿名可以，但不能没有边界。" | Keep anonymous-first flow, but pair it with boundaries: report, decline, public-place handoff, and future verification. |
+| P6 | Exchange student, language/coffee/campus tour | Uses Facebook groups or broad channels | Existing channels are too slow and planned too far ahead | Needs lightweight trust and fast response | Immediate availability, shared purpose, campus place | "如果我要下周，我用群；如果我要十分钟后，我用 Plus One。" | The strongest differentiation is immediacy; copy and ranking should favor right-now or near-now plans. |
+| P7 | Club/event-oriented student | Would not use it to organize events, but would use it to find someone to attend with | Events are easier with one companion but not always worth broadcasting | Wants event context and low-pressure attendance | Event name, time, meeting point, whether it is one companion | "活动很多，一个人去很正常，但两个人去更容易。" | Plus One can extend beyond meals/study/sports into event attendance without becoming an event-management tool. |
+| P8 | Introverted student | Avoids existing social apps because initiating feels exposed | Does not want to be judged for asking first | Would avoid flows requiring profiles, avatars, or long setup | Activity-first card, no heavy profile, easy exit | "我不是害怕认识人，我只是害怕先开口。" | Keep the product activity-first and avoid permanent profile requirements in MVP. |
 
 ## Simulated Pilot Notes
 
@@ -129,26 +131,44 @@ Role-play synthesis:
 3. The one-to-one model is a strength, but it must be explicit so users do not expect group matching.
 4. Anonymous short chat is most useful when paired with a normal decline path and a stronger safety path.
 
-## Synthesis Template
+## Real Interview Synthesis
 
 Top patterns:
 
-1. TBD
-2. TBD
-3. TBD
+1. Students are not primarily looking for a new social network; they want someone who is available for a small immediate plan.
+2. Public posting feels too exposed for casual needs such as lunch, coffee, study, or attending an event.
+3. Existing group channels are useful for planned activities, but weak for near-term availability.
+4. Anonymous posting reduces the pressure to initiate, but only works if it is paired with safety boundaries.
+5. Supply density is a major risk: if Discover is empty, users may not return.
 
 Most common alternatives:
 
-- TBD
+- Directly asking friends.
+- WhatsApp, WeChat, Facebook, or campus group chats.
+- Activity-specific clubs or event communities.
+- Going alone when nobody is clearly available.
 
 Most painful failure moments:
 
-- TBD
+- Wanting to do something now but not knowing who is free.
+- Feeling awkward messaging multiple people for a small casual plan.
+- Posting in a group and receiving no timely reply.
+- Having to use tools that feel too much like dating or long-term social networking.
 
 Required trust signals before meeting:
 
-- TBD
+- Public campus location.
+- Clear time and duration.
+- Mutual agreement before handoff.
+- Ability to decline without reporting.
+- Report path for unsafe behavior.
+- Future verified-student layer without forcing public identity.
 
 Product changes to consider:
 
-- TBD
+- Seed initial supply before real launch so Discover does not feel empty.
+- Consider verified student status before campus deployment.
+- Keep five-minute chat focused on confirmation, not general socializing.
+- Add activity-specific prompts and quick replies for study, sport, meals, language practice, and events.
+- Keep one-to-one positioning explicit: Plus One is for one companion, not group formation.
+- Preserve low-friction posting without profiles, avatars, or long onboarding.

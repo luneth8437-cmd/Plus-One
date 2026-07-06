@@ -1168,3 +1168,52 @@ Technical decisions:
 
 - Keep the fix CSS-only and mobile-scoped to avoid PC regressions.
 - Prefer chat-first ordering on mobile because the primary user intent after opening a chat is messaging.
+
+## 2026-07-06: Add Real Interview Notes to Product Validation
+
+Problem or confusion:
+
+- The product validation pack had an interview plan and role-play notes, but the real participant table was still placeholder content.
+- The user provided eight anonymized student interview notes covering international students, local students, study, sports, safety sensitivity, exchange students, events, and introverted users.
+
+Diagnosis:
+
+- The interview material directly supports the product thesis: users need immediate, low-pressure campus companionship, not another broad social network.
+- The notes also surface clear risks: cold-start supply, verified-student trust, anonymous misuse, and unclear transition from chat to meeting.
+
+Changed:
+
+- Updated `docs/product_validation/01_user_interviews.md` from a pure plan into real interview notes.
+- Replaced the P1-P8 placeholder rows with eight anonymized participant summaries and direct representative quotes.
+- Added a real interview synthesis with top patterns, alternatives, failure moments, trust signals, and product changes to consider.
+- Updated `docs/product_validation/README.md` status for the interview artifact.
+
+Worked:
+
+- The validation pack now has real qualitative evidence for the core positioning:
+  - immediate plans,
+  - one companion,
+  - activity-first rather than profile-first,
+  - anonymous but bounded,
+  - five-minute chat for confirmation rather than socializing.
+
+Failed or abandoned:
+
+- Did not claim these interviews prove product-market fit.
+- Did not add identifiable student information.
+- Did not update usability testing or analytics documents yet.
+
+Current status:
+
+- `01_user_interviews.md` is now stronger interview evidence rather than just a research script.
+- The remaining validation gaps are usability tests, full AI evaluation samples, and real funnel data.
+
+Next step:
+
+- Use these interview insights to update interview-facing answers, portfolio copy, and the usability test tasks.
+- Run 5-10 real usability tests on the live demo to validate whether the product flow matches the newly observed needs.
+
+Technical decisions:
+
+- Keep direct quotes anonymized.
+- Keep role-play notes visible but separate from real interview evidence.
