@@ -1122,3 +1122,49 @@ Technical decisions:
 
 - Keep personal career materials local unless the user explicitly wants them public.
 - Keep public repo claims backed by implementation, testing, and validation artifacts.
+
+## 2026-07-06: Mobile Chat Layout Fix
+
+Problem or confusion:
+
+- On mobile, opening an active chat made it difficult to reach the actual chat composer.
+- The large sticky top navigation and the full `Anonymous vibe chat` context panel consumed most of the viewport and made the chat feel blocked.
+
+Diagnosis:
+
+- Desktop layout uses a two-column chat shell with a sticky context panel, which works well on PC.
+- At mobile width the shell collapses to one column, but the context panel stayed sticky and remained above the chat panel.
+- The safest fix was to add mobile-only CSS under existing responsive breakpoints instead of changing default desktop rules.
+
+Changed:
+
+- Added mobile-only rules under `@media (max-width: 700px)`.
+- Mobile topbar is no longer sticky, so it does not occupy the viewport while scrolling through chat.
+- Mobile chat now places the chat panel before the context/actions panel.
+- Mobile chat messages get an internal scroll area so quick replies and the send box remain reachable.
+- Mobile safety actions stack cleanly in one column.
+- Bumped static asset query strings to `20260706-mobile-chat` to avoid stale CSS on phone browsers.
+
+Worked:
+
+- `manage.py check` passed.
+- Full `plusone` test suite passed: 76 tests OK.
+
+Failed or abandoned:
+
+- Did not change desktop chat layout, desktop navigation, or desktop grid defaults.
+- Did not add a new mobile navigation system yet.
+
+Current status:
+
+- Mobile chat should now prioritize the actual conversation and input box.
+- Desktop layout remains governed by the existing non-mobile CSS.
+
+Next step:
+
+- Verify on a real phone after deployment, especially active chat, agreed handoff, and closed chat states.
+
+Technical decisions:
+
+- Keep the fix CSS-only and mobile-scoped to avoid PC regressions.
+- Prefer chat-first ordering on mobile because the primary user intent after opening a chat is messaging.

@@ -2155,8 +2155,120 @@ code {
 }
 
 @media (max-width: 700px) {
+  .topbar {
+    position: static;
+  }
+
+  .page {
+    width: min(1180px, calc(100vw - 24px));
+    padding-top: 18px;
+    padding-bottom: 32px;
+  }
+
   .create-hero h1 {
     white-space: normal;
+  }
+
+  .chat-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  .chat-panel {
+    order: 1;
+    min-height: min(560px, calc(100dvh - 180px));
+    padding: 16px;
+  }
+
+  .chat-context {
+    order: 2;
+    position: static;
+    top: auto;
+    padding: 16px;
+  }
+
+  .chat-context .eyebrow {
+    margin: 0 0 4px;
+  }
+
+  .chat-context h1 {
+    font-size: clamp(26px, 8vw, 34px);
+    line-height: 1.08;
+    margin-bottom: 8px;
+  }
+
+  .chat-context p {
+    margin: 8px 0;
+  }
+
+  .chat-decision-copy {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .agree-state {
+    gap: 4px;
+    margin: 10px 0;
+  }
+
+  .messages-list {
+    max-height: 46dvh;
+    min-height: 220px;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+
+  .bubble {
+    max-width: 100%;
+  }
+
+  .bubble.mine {
+    max-width: 88%;
+  }
+
+  .quick-replies {
+    flex-wrap: nowrap;
+    margin-bottom: 10px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .quick-replies button {
+    flex: 0 0 auto;
+  }
+
+  .chat-form {
+    align-items: stretch;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .chat-form input {
+    min-width: 0;
+  }
+
+  .chat-form button {
+    flex: 0 0 auto;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .chat-safety-copy {
+    font-size: 12px;
+    margin-top: 10px;
+  }
+
+  .chat-safety-actions {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 1fr;
+  }
+
+  .chat-safety-actions form,
+  .chat-safety-actions button {
+    width: 100%;
   }
 
   .dashboard-web-row,
