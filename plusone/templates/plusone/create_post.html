@@ -1,32 +1,39 @@
 {% extends "plusone/base.html" %}
 {% block title %}Create | Plus One{% endblock %}
 {% block content %}
-<section class="hero compact">
+<section class="hero compact create-hero">
   <div>
-    <p class="eyebrow">LLM-assisted post creation</p>
+    <p class="eyebrow">Quick plan builder</p>
     <h1>Create a temporary Plus One card.</h1>
-    <p class="lead">Type casually first, then review the structured fields before publishing.</p>
+    <p class="lead">Write your plan casually, then review the details before publishing.</p>
   </div>
 </section>
 
 <section class="two-column create-layout">
   <article class="panel">
-    <h2>1. Draft from natural language</h2>
+    <h2>1. Tell Plus One your plan</h2>
     <form method="post" class="stacked-form">
       {% csrf_token %}
       {{ assist_form.as_p }}
-      <button class="primary-action" name="action" value="assist">Ask AI to structure it</button>
+      <button class="primary-action" name="action" value="assist">Draft my card</button>
     </form>
-    {% if parsed %}
-      <div class="ai-output">
-        <strong>AI / fallback output saved to LLMLog</strong>
-        <pre>{{ parsed }}</pre>
-      </div>
-    {% endif %}
   </article>
 
   <article class="panel">
     <h2>2. Review and publish</h2>
+    {% if time_options %}
+      <section class="time-clarifier" aria-label="Confirm start time">
+        <p class="eyebrow">Time needs confirmation</p>
+        <h3>You wrote an hour without AM or PM.</h3>
+        <div class="time-option-row">
+          {% for option in time_options %}
+            <button type="button" class="secondary-action compact" data-time-option="{{ option.value }}">
+              {{ option.label }} · {{ option.display }}
+            </button>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
     <form method="post" class="stacked-form">
       {% csrf_token %}
       {{ post_form.as_p }}

@@ -1,28 +1,26 @@
-import secrets
-from datetime import timedelta
-
 from django.contrib import messages
-from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
-from django.db.models import Q
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from .ai import moderate_text, parse_activity_text
+from .ai import parse_activity_text, suggest_ambiguous_time_options
 from .forms import ActivityAssistForm, ActivityPostForm, ChatMessageForm
-from .models import ActivityPost, CampusLocation, ChatMessage, Match, Swipe, UserProfile
-from .services.chat import record_agreement
+from .models import ActivityPost, Match, Swipe
+from .presenters import chat_message_payload, post_edit_initial, post_form_preview, post_initial_from_ai
+from .selectors import dashboard_context_for_user, discover_context_for_user
+from .services.chat import close_match, create_chat_message, record_agreement
 from .services.expiration import refresh_expired_records
+from .services.identity import ensure_anonymous_session, ensure_user_profile, reset_anonymous_identity_for_request
 from .services.matching import SwipeOutcome, handle_swipe
-
-
-ANONYMOUS_SESSION_USERNAME_KEY = "plusone_anonymous_username"
+from .services.posts import cancel_activity_post, moderate_activity_form, moderate_activity_text, save_activity_post_for_user
 
 
 def _safe_next_redirect(request, target, fallback):
+    # Login/profile pages accept a next= target, but only same-host redirects
+    # are allowed to avoid open redirect behavior.
     if target and url_has_allowed_host_and_scheme(
         target,
         allowed_hosts={request.get_host()},
@@ -32,175 +30,12 @@ def _safe_next_redirect(request, target, fallback):
     return redirect(fallback)
 
 
-def _anonymous_profile_defaults(username):
-    code = username.removeprefix("anon_")[:4].upper()
-    return {
-        "display_name": f"Campus Guest {code}",
-        "avatar_initial": code[:2] or "CG",
-        "major": "",
-        "year": "",
-        "campus_area": "Campus",
-        "interests": "",
-    }
-
-
-def create_anonymous_user():
-    User = get_user_model()
-    for _ in range(10):
-        username = f"anon_{secrets.token_hex(4)}"
-        if not User.objects.filter(username=username).exists():
-            user = User(username=username)
-            user.set_unusable_password()
-            user.save()
-            UserProfile.objects.create(user=user, **_anonymous_profile_defaults(username))
-            return user
-    raise RuntimeError("Could not allocate an anonymous Plus One identity.")
-
-
-def ensure_user_profile(user):
-    if user.username.startswith("anon_"):
-        defaults = _anonymous_profile_defaults(user.username)
-    else:
-        defaults = {
-            "display_name": user.get_full_name() or user.username,
-            "avatar_initial": (user.username[:1] or "S").upper(),
-        }
-    profile, _ = UserProfile.objects.get_or_create(user=user, defaults=defaults)
-    if not profile.avatar_initial:
-        profile.avatar_initial = (profile.display_name[:1] or user.username[:1] or "S").upper()
-        profile.save(update_fields=["avatar_initial"])
-    return profile
-
-
-def ensure_anonymous_session(request):
-    if request.user.is_authenticated:
-        ensure_user_profile(request.user)
-        return request.user
-
-    username = request.session.get(ANONYMOUS_SESSION_USERNAME_KEY)
-    User = get_user_model()
-    user = User.objects.filter(username=username).first() if username else None
-    if user is None:
-        user = create_anonymous_user()
-        request.session[ANONYMOUS_SESSION_USERNAME_KEY] = user.username
-
-    login(request, user)
-    return user
-
-
-def retire_anonymous_identity(user):
-    if not getattr(user, "is_authenticated", False) or not user.username.startswith("anon_"):
-        return {"posts": 0, "matches": 0}
-
-    posts = ActivityPost.objects.filter(
-        user=user,
-        status=ActivityPost.Status.ACTIVE,
-    ).update(status=ActivityPost.Status.CANCELLED, updated_at=timezone.now())
-    matches = Match.objects.filter(
-        Q(poster=user) | Q(swiper=user),
-        status=Match.Status.CHATTING,
-    ).update(status=Match.Status.EXPIRED)
-    return {"posts": posts, "matches": matches}
-
-
-def _post_initial_from_ai(parsed):
-    location = None
-    if parsed.get("location_name"):
-        location = CampusLocation.objects.filter(name__iexact=parsed["location_name"]).first()
-        if not location:
-            location = CampusLocation.objects.filter(name__icontains=parsed["location_name"]).first()
-    if not location:
-        location = CampusLocation.objects.first()
-
-    start_time = timezone.localtime()
-    if parsed.get("start_time"):
-        try:
-            start_time = timezone.datetime.fromisoformat(parsed["start_time"])
-            if timezone.is_naive(start_time):
-                start_time = timezone.make_aware(start_time, timezone.get_current_timezone())
-        except ValueError:
-            start_time = timezone.localtime() + timedelta(hours=1)
-
-    return {
-        "title": parsed.get("title", ""),
-        "description": parsed.get("description", ""),
-        "activity_type": parsed.get("activity_type", ActivityPost.ActivityType.OTHER),
-        "location": location.id if location else None,
-        "start_time": timezone.localtime(start_time).strftime("%Y-%m-%dT%H:%M"),
-        "expire_minutes": parsed.get("expire_minutes", 45),
-    }
-
-
-def _post_form_preview(form):
-    source = form.data if form.is_bound else form.initial
-    location = None
-    location_id = source.get("location")
-    if location_id:
-        location = CampusLocation.objects.filter(id=location_id).first()
-    activity_type = source.get("activity_type") or ActivityPost.ActivityType.OTHER
-    activity_label = dict(ActivityPost.ActivityType.choices).get(activity_type, "Other")
-    return {
-        "title": source.get("title") or "Your Plus One title",
-        "description": source.get("description") or "The card preview updates as you edit the structured fields.",
-        "activity_type": activity_type,
-        "activity_label": activity_label,
-        "location": location.name if location else "Campus location",
-        "start_time": source.get("start_time") or "Start time",
-        "expire_minutes": source.get("expire_minutes") or "45",
-    }
-
-
-def _post_edit_initial(post):
-    remaining_minutes = int(max(5, round((post.expire_time - timezone.now()).total_seconds() / 60)))
-    return {
-        "title": post.title,
-        "description": post.description,
-        "activity_type": post.activity_type,
-        "location": post.location_id,
-        "start_time": timezone.localtime(post.start_time).strftime("%Y-%m-%dT%H:%M"),
-        "expire_minutes": remaining_minutes,
-    }
-
-
 def discover(request):
     ensure_anonymous_session(request)
     refresh_expired_records()
-    activity_type = request.GET.get("activity_type", "")
-    location_id = request.GET.get("location", "")
-    time_window = request.GET.get("time_window", "")
-    matched_id = request.GET.get("matched")
-    swiped_ids = Swipe.objects.filter(user=request.user).values_list("post_id", flat=True)
-    posts = (
-        ActivityPost.objects.active()
-        .exclude(id__in=swiped_ids)
-        .select_related("user", "location")
-    )
-    if activity_type:
-        posts = posts.filter(activity_type=activity_type)
-    if location_id:
-        posts = posts.filter(location_id=location_id)
-    if time_window == "now":
-        posts = posts.filter(start_time__lte=timezone.now() + timedelta(hours=2))
-    if time_window == "today":
-        posts = posts.filter(start_time__date=timezone.localdate())
-
-    matched_match = None
-    if matched_id:
-        matched_match = (
-            Match.objects.filter(id=matched_id)
-            .filter(Q(poster=request.user) | Q(swiper=request.user))
-            .select_related("post", "post__location")
-            .first()
-        )
-    context = {
-        "posts": posts,
-        "activity_types": ActivityPost.ActivityType.choices,
-        "locations": CampusLocation.objects.all(),
-        "selected_activity_type": activity_type,
-        "selected_location": location_id,
-        "selected_time_window": time_window,
-        "matched_match": matched_match,
-    }
+    context = discover_context_for_user(request.user, request.GET, request.session.get("last_passed_post_id"))
+    if request.session.get("last_passed_post_id") and not context["undo_pass_post"]:
+        request.session.pop("last_passed_post_id", None)
     return render(request, "plusone/discover.html", context)
 
 
@@ -222,11 +57,7 @@ def start_anonymous_session(request):
 def reset_anonymous_identity(request):
     if request.method != "POST":
         return redirect("session")
-    retired = retire_anonymous_identity(request.user)
-    logout(request)
-    user = create_anonymous_user()
-    request.session[ANONYMOUS_SESSION_USERNAME_KEY] = user.username
-    login(request, user)
+    retired = reset_anonymous_identity_for_request(request)
     if retired["posts"] or retired["matches"]:
         messages.success(request, "A fresh temporary identity is ready. Previous live cards and open chats were closed.")
     else:
@@ -247,26 +78,36 @@ def profile_setup(request):
 def create_post(request):
     refresh_expired_records()
     assist_form = ActivityAssistForm()
-    initial = {"start_time": (timezone.localtime() + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M")}
-    post_form = ActivityPostForm(initial=initial)
+    post_form = ActivityPostForm()
     parsed = None
+    time_options = []
 
     if request.method == "POST" and request.POST.get("action") == "assist":
+        # Assist is a draft-only path: unsafe input is blocked before parsing,
+        # and successful AI output still requires manual review before publish.
         assist_form = ActivityAssistForm(request.POST)
         if assist_form.is_valid():
-            parsed = parse_activity_text(request.user, assist_form.cleaned_data["raw_text"])
-            post_form = ActivityPostForm(initial=_post_initial_from_ai(parsed))
-            messages.success(request, "AI assistant drafted the activity card. Review it before publishing.")
+            raw_text = assist_form.cleaned_data["raw_text"]
+            moderation = moderate_activity_text(request.user, raw_text)
+            if moderation.get("flagged"):
+                messages.error(request, f"Safety check flagged this request: {moderation.get('reason', 'Please revise it.')}")
+            else:
+                parsed = parse_activity_text(request.user, raw_text)
+                post_form = ActivityPostForm(initial=post_initial_from_ai(parsed))
+                time_options = suggest_ambiguous_time_options(raw_text) if not parsed.get("start_time") else []
+                messages.success(request, "Draft ready. Review the details before publishing.")
 
     if request.method == "POST" and request.POST.get("action") == "publish":
+        # Publish uses the reviewed structured form, then moderates the final
+        # title/description in case the user edited AI output before submitting.
         post_form = ActivityPostForm(request.POST)
         assist_form = ActivityAssistForm(initial={"raw_text": request.POST.get("raw_text", "")})
         if post_form.is_valid():
-            moderation = moderate_text(request.user, f"{post_form.cleaned_data['title']} {post_form.cleaned_data['description']}")
+            moderation = moderate_activity_form(request.user, post_form)
             if moderation.get("flagged"):
                 messages.error(request, f"Safety check flagged this post: {moderation.get('reason', 'Please revise it.')}")
             else:
-                post = post_form.save_for_user(request.user)
+                post = save_activity_post_for_user(request.user, post_form)
                 messages.success(request, "Your Plus One card is live.")
                 return redirect("post_detail", post_id=post.id)
 
@@ -277,7 +118,8 @@ def create_post(request):
             "assist_form": assist_form,
             "post_form": post_form,
             "parsed": parsed,
-            "post_preview": _post_form_preview(post_form),
+            "post_preview": post_form_preview(post_form),
+            "time_options": time_options,
         },
     )
 
@@ -306,27 +148,26 @@ def edit_post(request, post_id):
         return redirect("dashboard")
 
     if request.method == "POST" and request.POST.get("action") == "cancel":
-        post.status = ActivityPost.Status.CANCELLED
-        post.save(update_fields=["status", "updated_at"])
+        cancel_activity_post(post)
         messages.info(request, "Your Plus One card was cancelled.")
         return redirect("dashboard")
 
-    form = ActivityPostForm(initial=_post_edit_initial(post), instance=post)
+    form = ActivityPostForm(initial=post_edit_initial(post), instance=post)
     if request.method == "POST" and request.POST.get("action") == "save":
         form = ActivityPostForm(request.POST, instance=post)
         if form.is_valid():
-            moderation = moderate_text(request.user, f"{form.cleaned_data['title']} {form.cleaned_data['description']}")
+            moderation = moderate_activity_form(request.user, form)
             if moderation.get("flagged"):
                 messages.error(request, f"Safety check flagged this update: {moderation.get('reason', 'Please revise it.')}")
             else:
-                form.save_for_user(request.user)
+                save_activity_post_for_user(request.user, form)
                 messages.success(request, "Your Plus One card was updated.")
                 return redirect("post_detail", post_id=post.id)
 
     return render(
         request,
         "plusone/edit_post.html",
-        {"post": post, "post_form": form, "post_preview": _post_form_preview(form)},
+        {"post": post, "post_form": form, "post_preview": post_form_preview(form)},
     )
 
 
@@ -342,80 +183,48 @@ def swipe_post(request, post_id):
     if result.outcome == SwipeOutcome.INACTIVE_POST:
         messages.error(request, "This post is no longer active.")
         return redirect("discover")
+    if result.outcome == SwipeOutcome.FULL_POST:
+        messages.info(request, "That Plus One just filled up. I kept you in Discover so you can pick another card.")
+        return redirect("discover")
     if result.outcome == SwipeOutcome.INVALID_ACTION:
         messages.error(request, "Unknown swipe action.")
         return redirect("post_detail", post_id=result.post_id)
     if result.outcome == SwipeOutcome.PASSED:
-        messages.info(request, "Skipped. The queue is ready for the next card.")
+        request.session["last_passed_post_id"] = result.post_id
+        messages.info(request, "Skipped. Undo is available while you keep browsing.")
         return redirect("discover")
     if result.outcome == SwipeOutcome.MATCH_CREATED:
         messages.success(request, "It's a vibe. You have five minutes to chat.")
         return redirect(f"{reverse('discover')}?matched={result.match_id}")
+    if result.outcome == SwipeOutcome.TRY_AGAIN:
+        messages.warning(request, "That card is busy right now. Please try again.")
+        return redirect("discover")
     messages.info(request, "You already matched on this post.")
     return redirect("chat", match_id=result.match_id)
 
 
 @login_required
+def undo_pass(request, post_id):
+    if request.method != "POST":
+        return redirect("discover")
+    deleted, _ = Swipe.objects.filter(user=request.user, post_id=post_id, action=Swipe.Action.PASS).delete()
+    if request.session.get("last_passed_post_id") == post_id:
+        request.session.pop("last_passed_post_id", None)
+    if deleted:
+        messages.success(request, "Pass undone. The card is back in your queue.")
+    else:
+        messages.info(request, "There was no pass to undo.")
+    return redirect("discover")
+
+
+@login_required
 def dashboard(request):
     refresh_expired_records()
-    active_posts = (
-        ActivityPost.objects.filter(user=request.user, status=ActivityPost.Status.ACTIVE, expire_time__gt=timezone.now())
-        .select_related("location")
-    )
-    expired_posts = ActivityPost.objects.filter(user=request.user).filter(Q(status=ActivityPost.Status.EXPIRED) | Q(expire_time__lte=timezone.now()))
-    cancelled_posts = ActivityPost.objects.filter(user=request.user, status=ActivityPost.Status.CANCELLED).select_related("location")
-    matches = Match.objects.filter(Q(poster=request.user) | Q(swiper=request.user)).select_related("post", "poster", "swiper", "post__location")
-    open_chats_count = matches.filter(status=Match.Status.CHATTING).count()
-    handoff_count = matches.filter(status=Match.Status.AGREED).count()
-    return render(
-        request,
-        "plusone/dashboard.html",
-        {
-            "active_posts": active_posts,
-            "open_chats_count": open_chats_count,
-            "handoff_count": handoff_count,
-            "expired_posts": expired_posts,
-            "cancelled_posts": cancelled_posts,
-            "matches": matches,
-        },
-    )
-
-
-def _chat_message_payload(message, viewer):
-    if message.is_system:
-        sender_label = "Icebreaker"
-        bubble_class = "system"
-    elif message.sender_id == viewer.id:
-        sender_label = "You"
-        bubble_class = "mine"
-    else:
-        sender_label = "Anonymous match"
-        bubble_class = "theirs"
-    return {
-        "id": message.id,
-        "sender_label": sender_label,
-        "bubble_class": bubble_class,
-        "message": message.message,
-        "created_at": timezone.localtime(message.created_at).strftime("%H:%M"),
-        "is_flagged": message.is_flagged,
-        "is_system": message.is_system,
-    }
-
-
-def _create_chat_message(match, user, text):
-    moderation = moderate_text(user, text)
-    message = ChatMessage.objects.create(
-        match=match,
-        sender=user,
-        message=text,
-        is_flagged=bool(moderation.get("flagged")),
-    )
-    return message, moderation
+    return render(request, "plusone/dashboard.html", dashboard_context_for_user(request.user))
 
 
 @login_required
 def chat(request, match_id):
-    refresh_expired_records()
     match = get_object_or_404(Match.objects.select_related("post", "poster", "swiper", "post__location"), id=match_id)
     if not match.is_participant(request.user):
         return HttpResponseForbidden("Only matched users can access this chat.")
@@ -428,9 +237,11 @@ def chat(request, match_id):
             messages.error(request, "This chat is no longer active.")
         elif form.is_valid():
             text = form.cleaned_data["message"]
-            _, moderation = _create_chat_message(match, request.user, text)
+            message, moderation = create_chat_message(match, request.user, text)
             if moderation.get("flagged"):
-                messages.warning(request, f"Message sent but flagged for review: {moderation.get('reason', 'Safety check triggered.')}")
+                messages.error(request, f"Message blocked by safety check: {moderation.get('reason', 'Safety check triggered.')}")
+            elif message:
+                return redirect("chat", match_id=match.id)
             return redirect("chat", match_id=match.id)
 
     if request.method == "POST" and request.POST.get("action") == "agree":
@@ -439,14 +250,28 @@ def chat(request, match_id):
             messages.success(request, "Your agreement was recorded.")
         return redirect("chat", match_id=match.id)
 
+    if request.method == "POST" and request.POST.get("action") in {"decline", "report"}:
+        action = request.POST.get("action")
+        reason = Match.CloseReason.REPORTED if action == "report" else Match.CloseReason.DECLINED
+        result = close_match(match.id, request.user, reason)
+        if result.closed and reason == Match.CloseReason.REPORTED:
+            messages.warning(request, "Safety report submitted. This chat was closed.")
+        elif result.closed:
+            messages.info(request, "Chat declined. The Plus One can continue without this match.")
+        else:
+            messages.info(request, "This chat is already closed.")
+        return redirect("chat", match_id=match.id)
+
     viewer_agreed = match.poster_agreed if request.user.id == match.poster_id else match.swiper_agreed
     other_agreed = match.swiper_agreed if request.user.id == match.poster_id else match.poster_agreed
+    messages_list = list(match.messages.select_related("sender").order_by("id"))
     return render(
         request,
         "plusone/chat.html",
         {
             "match": match,
-            "messages_list": match.messages.select_related("sender"),
+            "messages_list": messages_list,
+            "last_message_id": messages_list[-1].id if messages_list else 0,
             "form": form,
             "viewer_agreed": viewer_agreed,
             "other_agreed": other_agreed,
@@ -456,7 +281,8 @@ def chat(request, match_id):
 
 @login_required
 def chat_messages(request, match_id):
-    refresh_expired_records()
+    # JSON endpoint used by the chat page for lightweight polling and async
+    # sends. It expires only this match instead of sweeping all records.
     match = get_object_or_404(Match.objects.select_related("post", "poster", "swiper"), id=match_id)
     if not match.is_participant(request.user):
         return HttpResponseForbidden("Only matched users can access this chat.")
@@ -468,21 +294,31 @@ def chat_messages(request, match_id):
             return JsonResponse({"ok": False, "error": "This chat is no longer active."}, status=409)
         if not form.is_valid():
             return JsonResponse({"ok": False, "errors": form.errors}, status=400)
-        message, moderation = _create_chat_message(match, request.user, form.cleaned_data["message"])
+        message, moderation = create_chat_message(match, request.user, form.cleaned_data["message"])
+        if moderation.get("flagged"):
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "flagged": True,
+                    "error": "Message blocked by safety check.",
+                    "warning": moderation.get("reason", "Safety check triggered."),
+                },
+                status=400,
+            )
         return JsonResponse(
             {
                 "ok": True,
-                "message": _chat_message_payload(message, request.user),
+                "message": chat_message_payload(message, request.user),
                 "flagged": bool(moderation.get("flagged")),
                 "warning": moderation.get("reason", "") if moderation.get("flagged") else "",
             }
         )
 
     after_id = request.GET.get("after")
-    message_qs = match.messages.select_related("sender")
+    message_qs = match.messages.select_related("sender").order_by("id")
     if after_id and after_id.isdigit():
         message_qs = message_qs.filter(id__gt=int(after_id))
-    payload = [_chat_message_payload(message, request.user) for message in message_qs]
+    payload = [chat_message_payload(message, request.user) for message in message_qs]
     return JsonResponse(
         {
             "ok": True,

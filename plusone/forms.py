@@ -26,7 +26,6 @@ class ActivityPostForm(forms.ModelForm):
         initial=45,
         help_text="Minutes. Default is 45.",
     )
-
     class Meta:
         model = ActivityPost
         fields = ["title", "description", "activity_type", "location", "start_time", "expire_minutes"]
@@ -37,7 +36,9 @@ class ActivityPostForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["activity_type"].choices = [("", "Activity"), *ActivityPost.ActivityType.choices]
         self.fields["location"].queryset = CampusLocation.objects.order_by("area", "name")
+        self.fields["location"].empty_label = "Campus location"
         self.fields["title"].widget.attrs.setdefault("placeholder", "Basketball game tonight")
         self.fields["description"].widget.attrs.setdefault("placeholder", "Looking for someone to join for a quick vibe check first.")
 
@@ -45,6 +46,8 @@ class ActivityPostForm(forms.ModelForm):
         start_time = self.cleaned_data["start_time"]
         if timezone.is_naive(start_time):
             start_time = timezone.make_aware(start_time, timezone.get_current_timezone())
+        # Allow a small grace window so a user can submit a just-filled form
+        # without racing the server clock by a few seconds.
         if start_time < timezone.now() - timedelta(minutes=5):
             raise forms.ValidationError("Start time cannot be in the past.")
         return start_time
@@ -53,6 +56,7 @@ class ActivityPostForm(forms.ModelForm):
         post = super().save(commit=False)
         post.user = user
         post.expire_time = timezone.now() + timedelta(minutes=self.cleaned_data["expire_minutes"])
+        post.capacity = 1
         post.status = ActivityPost.Status.ACTIVE
         post.save()
         return post

@@ -14,6 +14,7 @@ urlpatterns = [
     path("posts/<int:post_id>/", views.post_detail, name="post_detail"),
     path("posts/<int:post_id>/edit/", views.edit_post, name="edit_post"),
     path("posts/<int:post_id>/swipe/", views.swipe_post, name="swipe_post"),
+    path("posts/<int:post_id>/undo-pass/", views.undo_pass, name="undo_pass"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("matches/", views.dashboard, name="matches_dashboard"),
     path("chat/<int:match_id>/", views.chat, name="chat"),

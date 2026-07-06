@@ -5,8 +5,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Plus One{% endblock %}</title>
-  <link rel="stylesheet" href="{% static 'plusone/styles.css' %}">
-  <script defer src="{% static 'plusone/app.js' %}"></script>
+  <link rel="stylesheet" href="{% static 'plusone/styles.css' %}?v=20260705-one-to-one-dashboard">
+  <script defer src="{% static 'plusone/app.js' %}?v=20260705-one-to-one-dashboard"></script>
 </head>
 <body>
   <header class="topbar">
@@ -16,7 +16,7 @@
     <nav class="nav">
       <a href="{% url 'discover' %}">Discover</a>
       <a href="{% url 'create_post' %}">Create</a>
-      <a href="{% url 'dashboard' %}">My Plus Ones</a>
+      <a href="{% url 'dashboard' %}">My Plus Ones{% if open_chat_count %}<span class="nav-badge">{{ open_chat_count }}</span>{% endif %}</a>
       <a href="{% url 'about' %}">About</a>
     </nav>
     <div class="identity-summary">

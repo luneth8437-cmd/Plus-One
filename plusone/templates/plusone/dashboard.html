@@ -2,85 +2,95 @@
 {% block title %}My Plus Ones | Plus One{% endblock %}
 {% block content %}
 <section class="dashboard-page">
-  <header class="dashboard-hero">
+  <header class="dashboard-hero{% if open_matches %} has-open-chat{% endif %}">
     <div class="dashboard-hero-copy">
-      <p class="eyebrow">My Plus Ones</p>
-      <h1>Keep your Plus Ones moving.</h1>
-      <p class="lead">Track active posts, open chats, meet handoffs, and post history without leaving the dashboard.</p>
+      {% if open_matches %}
+        <p class="eyebrow">Needs decision</p>
+        <h1>You have a chat waiting.</h1>
+        <p class="lead">Open chats expire fast. Decide whether to meet, decline, or report before the timer runs out.</p>
+      {% else %}
+        <p class="eyebrow">My Plus Ones</p>
+        <h1>Keep your Plus Ones moving.</h1>
+        <p class="lead">Track active posts, open chats, meet handoffs, and post history without leaving the dashboard.</p>
+      {% endif %}
       <div class="dashboard-hero-actions">
-        <a class="primary-action" href="{% url 'create_post' %}">Create another Plus One</a>
+        {% if open_matches %}
+          {% with next_match=open_matches.0 %}
+            <a class="primary-action coral" href="{% url 'chat' next_match.id %}">Open waiting chat</a>
+          {% endwith %}
+        {% else %}
+          <a class="primary-action" href="{% url 'create_post' %}">Create another Plus One</a>
+        {% endif %}
         <a class="secondary-action" href="{% url 'discover' %}">View Discover</a>
       </div>
     </div>
 
-    <div class="dashboard-hero-visual" aria-hidden="true">
-      <div class="hero-summary-card">
-        <strong>{{ open_chats_count }}</strong>
-        <span>open chats</span>
-      </div>
-      <div class="hero-match-card">
-        <span class="hero-marker blue"></span>
+    <aside class="dashboard-state-panel state-{{ dashboard_state.tone }}" aria-label="Current Plus One state">
+      <p class="eyebrow">{{ dashboard_state.eyebrow }}</p>
+      <h2>{{ dashboard_state.title }}</h2>
+      <p>{{ dashboard_state.body }}</p>
+      {% if dashboard_state.deadline %}
+        <span class="state-deadline"><span class="countdown" data-deadline="{{ dashboard_state.deadline|date:'c' }}">--</span> left</span>
+      {% endif %}
+      <div class="dashboard-state-metrics" aria-label="Dashboard summary">
         <div>
-          <strong>Active cards</strong>
-          <small>{{ active_posts|length }} live on campus</small>
+          <strong>{{ active_posts_count }}</strong>
+          <span>active</span>
         </div>
-        <span class="hero-score">Now</span>
-      </div>
-      <div class="hero-match-card">
-        <span class="hero-marker pink"></span>
         <div>
-          <strong>Open chats</strong>
-          <small>{{ open_chats_count }} still deciding</small>
+          <strong>{{ open_chats_count }}</strong>
+          <span>chats</span>
         </div>
-        <span class="hero-score">Live</span>
-      </div>
-      <div class="hero-match-card">
-        <span class="hero-marker gold"></span>
         <div>
-          <strong>Meet handoffs</strong>
-          <small>{{ handoff_count }} agreed plan{{ handoff_count|pluralize }}</small>
+          <strong>{{ handoff_count }}</strong>
+          <span>handoffs</span>
         </div>
-        <span class="hero-score">Done</span>
       </div>
-    </div>
+    </aside>
   </header>
 
-  <section class="dashboard-stats" aria-label="Dashboard summary">
-    <article class="dashboard-stat-card stat-active">
-      <strong>{{ active_posts|length }}</strong>
-      <span>active posts</span>
-    </article>
-    <article class="dashboard-stat-card stat-matches">
-      <strong>{{ open_chats_count }}</strong>
-      <span>open chats</span>
-    </article>
-    <article class="dashboard-stat-card stat-handoffs">
-      <strong>{{ handoff_count }}</strong>
-      <span>meet handoffs</span>
-    </article>
-  </section>
-
   <section class="dashboard-web-grid">
+    {% if open_matches %}
+      <article class="dashboard-panel dashboard-panel-wide priority-panel">
+        <div class="dashboard-panel-head">
+          <div>
+            <span class="dashboard-pill active">Needs decision</span>
+            <h2>Open chats need a decision</h2>
+            <p class="panel-helper">Handle these before creating or browsing more cards.</p>
+          </div>
+        </div>
+
+        <div class="dashboard-list">
+          {% for match in open_matches %}
+            <a class="dashboard-web-row match-row-web type-{{ match.post.activity_type }}" href="{% url 'chat' match.id %}">
+              <div class="dashboard-row-main">
+                <strong>{{ match.post.title }}</strong>
+                <span>{{ match.post.location.name }} | {{ match.post.start_time|date:"M j, H:i" }}</span>
+                <small><span class="countdown" data-deadline="{{ match.chat_expires_at|date:'c' }}">--</span> left to decide</small>
+              </div>
+              <span class="teal-pill">Open chat</span>
+            </a>
+          {% endfor %}
+        </div>
+      </article>
+    {% endif %}
+
     <article class="dashboard-panel dashboard-panel-wide">
       <div class="dashboard-panel-head">
         <div>
           <span class="dashboard-pill active">Active</span>
-          <h2>Active posts</h2>
+          <h2>Live cards</h2>
         </div>
         <a class="dashboard-text-link" href="{% url 'create_post' %}">New card</a>
       </div>
 
       <div class="dashboard-list">
         {% for post in active_posts %}
-          <article class="dashboard-web-row type-{{ post.activity_type }}">
+          <article class="dashboard-web-row live-card-row type-{{ post.activity_type }}">
             <div class="dashboard-row-main">
               <strong>{{ post.title }}</strong>
               <span>{{ post.start_time|date:"H:i" }} | {{ post.location.name }}</span>
-              <small><span class="countdown" data-deadline="{{ post.expire_time|date:'c' }}">--</span> left</small>
-            </div>
-            <div class="dashboard-row-metric">
-              <strong>Live</strong>
-              <span>active now</span>
+              <small>Waiting for one match | <span class="countdown" data-deadline="{{ post.expire_time|date:'c' }}">--</span> left</small>
             </div>
             <div class="dashboard-row-actions">
               <a href="{% url 'post_detail' post.id %}">View</a>
@@ -88,7 +98,7 @@
             </div>
           </article>
         {% empty %}
-          <p class="dashboard-empty">No active posts.</p>
+          <p class="dashboard-empty">No live cards right now.</p>
         {% endfor %}
       </div>
     </article>
@@ -96,35 +106,48 @@
     <article class="dashboard-panel">
       <div class="dashboard-panel-head">
         <div>
-          <span class="dashboard-pill">Matches</span>
-          <h2>Recent matches</h2>
+          <span class="dashboard-pill">Handoffs</span>
+          <h2>Meet handoffs</h2>
         </div>
       </div>
 
       <div class="dashboard-list compact">
-        {% for match in matches %}
+        {% for match in handoff_matches %}
           <a class="dashboard-web-row match-row-web type-{{ match.post.activity_type }}" href="{% url 'chat' match.id %}">
+            <div class="dashboard-row-main">
+              <strong>{{ match.post.title }}</strong>
+              <span>{{ match.post.location.name }} | {{ match.post.start_time|date:"M j, H:i" }}</span>
+            </div>
+            <span class="teal-pill handoff-pill">View handoff</span>
+          </a>
+        {% empty %}
+          <p class="dashboard-empty">No meet handoffs yet.</p>
+        {% endfor %}
+      </div>
+    </article>
+
+    <article class="dashboard-panel">
+      <div class="dashboard-panel-head">
+        <div>
+          <span class="dashboard-pill">History</span>
+          <h2>Closed activity</h2>
+        </div>
+      </div>
+
+      <div class="dashboard-list compact">
+        {% for match in closed_matches %}
+          <a class="dashboard-web-row muted type-{{ match.post.activity_type }}" href="{% url 'chat' match.id %}">
             <div class="dashboard-row-main">
               <strong>{{ match.post.title }}</strong>
               <span>{{ match.get_status_display }} | {{ match.post.location.name }}</span>
             </div>
-            <span class="teal-pill">Open chat</span>
+            {% if match.status == "declined" %}
+              <span class="teal-pill muted-pill">Declined</span>
+            {% else %}
+              <span class="teal-pill muted-pill">Chat ended</span>
+            {% endif %}
           </a>
-        {% empty %}
-          <p class="dashboard-empty">No matches yet.</p>
         {% endfor %}
-      </div>
-    </article>
-
-    <article class="dashboard-panel">
-      <div class="dashboard-panel-head">
-        <div>
-          <span class="dashboard-pill">Expired</span>
-          <h2>Expired posts</h2>
-        </div>
-      </div>
-
-      <div class="dashboard-list compact">
         {% for post in expired_posts %}
           <a class="dashboard-web-row muted type-{{ post.activity_type }}" href="{% url 'post_detail' post.id %}">
             <div class="dashboard-row-main">
@@ -132,21 +155,7 @@
               <span>Expired {{ post.expire_time|date:"M j, H:i" }}</span>
             </div>
           </a>
-        {% empty %}
-          <p class="dashboard-empty">No expired posts.</p>
         {% endfor %}
-      </div>
-    </article>
-
-    <article class="dashboard-panel">
-      <div class="dashboard-panel-head">
-        <div>
-          <span class="dashboard-pill">Cancelled</span>
-          <h2>Cancelled posts</h2>
-        </div>
-      </div>
-
-      <div class="dashboard-list compact">
         {% for post in cancelled_posts %}
           <a class="dashboard-web-row muted type-{{ post.activity_type }}" href="{% url 'post_detail' post.id %}">
             <div class="dashboard-row-main">
@@ -154,9 +163,10 @@
               <span>Cancelled | {{ post.location.name }}</span>
             </div>
           </a>
-        {% empty %}
-          <p class="dashboard-empty">No cancelled posts.</p>
         {% endfor %}
+        {% if not closed_matches and not expired_posts and not cancelled_posts %}
+          <p class="dashboard-empty">No closed activity yet.</p>
+        {% endif %}
       </div>
     </article>
   </section>

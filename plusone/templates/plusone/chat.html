@@ -6,6 +6,9 @@
     <p class="eyebrow">Anonymous vibe chat</p>
     <h1>{{ match.post.title }}</h1>
     <p>{{ match.post.location.name }} · {{ match.post.start_time|date:"M j, H:i" }}</p>
+    {% if match.status == "chatting" %}
+      <p class="chat-decision-copy">You have five minutes to decide if you both want to meet.</p>
+    {% endif %}
     <p>Status: <strong>{{ match.get_status_display }}</strong></p>
     <p>Chat timer: <strong class="countdown" data-deadline="{{ match.chat_expires_at|date:'c' }}">--</strong></p>
     <div class="agree-state">
@@ -24,11 +27,27 @@
           <button class="primary-action coral" name="action" value="agree">Agree to meet</button>
         </form>
       {% endif %}
+      <p class="chat-safety-copy">Decline closes this match without a report. Use Report safety issue only when something feels unsafe.</p>
+      <div class="chat-safety-actions" aria-label="Chat safety actions">
+        <form method="post">
+          {% csrf_token %}
+          <button class="secondary-action compact" name="action" value="decline">Decline match</button>
+        </form>
+        <form method="post" data-confirm-submit="Report this chat and close it? Use this only for safety concerns.">
+          {% csrf_token %}
+          <button class="secondary-action compact danger" name="action" value="report">Report safety issue</button>
+        </form>
+      </div>
     {% elif match.status == "agreed" %}
       <section class="handoff-card" aria-label="Meet handoff">
         <p class="eyebrow">Meet handoff</p>
-        <h2>You both agreed to meet.</h2>
+        <h2>Meet handoff ready.</h2>
+        <p class="handoff-summary">You both agreed to meet. Use this as the final check before leaving chat.</p>
         <dl>
+          <div>
+            <dt>Plan</dt>
+            <dd>{{ match.post.title }}</dd>
+          </div>
           <div>
             <dt>Meet at</dt>
             <dd>{{ match.post.location.name }}</dd>
@@ -38,7 +57,14 @@
             <dd>{{ match.post.start_time|date:"M j, H:i" }}</dd>
           </div>
         </dl>
-        <p class="safety-note">Meet in a public place. Keep it brief and leave if it feels off.</p>
+        <div class="handoff-safety">
+          <h3>Safety check</h3>
+          <ul>
+            <li>Meet in a public place.</li>
+            <li>Keep the first handoff brief.</li>
+            <li>Leave or report if anything feels off.</li>
+          </ul>
+        </div>
         <div class="handoff-actions">
           <a class="primary-action" href="{% url 'dashboard' %}">Back to Dashboard</a>
           <a class="secondary-action" href="{% url 'create_post' %}">Create another Plus One</a>
@@ -48,7 +74,7 @@
   </aside>
 
   <article class="panel chat-panel" data-chat-endpoint="{% url 'chat_messages' match.id %}" data-chat-status="{{ match.status }}">
-    <div class="messages-list" data-chat-messages data-last-message-id="{% if messages_list %}{{ messages_list.last.id }}{% else %}0{% endif %}">
+    <div class="messages-list" data-chat-messages data-last-message-id="{{ last_message_id }}">
       {% for message in messages_list %}
         <div class="bubble {% if message.is_system %}system{% elif message.sender_id == user.id %}mine{% else %}theirs{% endif %}" data-message-id="{{ message.id }}">
           <small>
@@ -63,14 +89,23 @@
       {% endfor %}
     </div>
     {% if match.status == "chatting" %}
+      <div class="quick-replies" aria-label="Quick replies">
+        <button type="button" data-quick-reply="Where exactly should we meet?">Where exactly?</button>
+        <button type="button" data-quick-reply="I can be there in 5 minutes.">There in 5</button>
+        <button type="button" data-quick-reply="Can we meet near the entrance?">Near entrance?</button>
+        <button type="button" data-quick-reply="I am not comfortable meeting.">Not comfortable</button>
+      </div>
       <form method="post" class="chat-form" data-chat-form>
         {% csrf_token %}
         <input type="hidden" name="action" value="send">
         {{ form.message }}
         <button type="submit">Send</button>
+        <p class="chat-inline-warning" data-chat-warning hidden></p>
       </form>
     {% elif match.status == "agreed" %}
       <p class="notice">This chat is complete. Meet safely at the agreed place and time.</p>
+    {% elif match.status == "declined" %}
+      <p class="notice">This chat was closed by a participant.</p>
     {% else %}
       <p class="notice">This chat is closed.</p>
     {% endif %}

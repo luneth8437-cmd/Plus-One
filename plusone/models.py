@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models import Count, Q
 from django.utils import timezone
 
 
@@ -47,10 +48,16 @@ class CampusLocation(models.Model):
 
 class ActivityPostQuerySet(models.QuerySet):
     def active(self):
-        return self.filter(status=ActivityPost.Status.ACTIVE, expire_time__gt=timezone.now())
+        return (
+            self.filter(status=ActivityPost.Status.ACTIVE, expire_time__gt=timezone.now())
+            .annotate(holding_matches=Count("matches", filter=Q(matches__status__in=Match.HOLDING_STATUSES)))
+            .filter(holding_matches__lt=1)
+        )
 
 
 class ActivityPost(models.Model):
+    """Temporary card shown in Discover until it expires, matches, or is cancelled."""
+
     class ActivityType(models.TextChoices):
         FOOD = "food", "Food"
         SPORTS = "sports", "Sports"
@@ -72,6 +79,7 @@ class ActivityPost(models.Model):
     location = models.ForeignKey(CampusLocation, on_delete=models.PROTECT, related_name="activity_posts")
     start_time = models.DateTimeField()
     expire_time = models.DateTimeField()
+    capacity = models.PositiveSmallIntegerField(default=1)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -84,6 +92,7 @@ class ActivityPost(models.Model):
             models.Index(fields=["activity_type", "status"]),
             models.Index(fields=["start_time", "expire_time"]),
             models.Index(fields=["status", "expire_time"]),
+            models.Index(fields=["user", "status", "expire_time"], name="post_user_status_exp_idx"),
         ]
 
     def __str__(self):
@@ -100,8 +109,18 @@ class ActivityPost(models.Model):
                 self.save(update_fields=["status", "updated_at"])
         return self.status == self.Status.EXPIRED
 
+    @property
+    def held_spots(self):
+        return self.matches.filter(status__in=Match.HOLDING_STATUSES).count()
+
+    @property
+    def spots_remaining(self):
+        return max(0, 1 - self.held_spots)
+
 
 class Swipe(models.Model):
+    """One user's interest/pass decision for a post."""
+
     class Action(models.TextChoices):
         INTERESTED = "interested", "Interested"
         PASS = "pass", "Pass"
@@ -121,11 +140,19 @@ class Swipe(models.Model):
 
 
 class Match(models.Model):
+    """A five-minute anonymous chat created when someone swipes interested."""
+
     class Status(models.TextChoices):
         CHATTING = "chatting", "Chatting"
         AGREED = "agreed", "Agreed to meet"
         DECLINED = "declined", "Declined"
         EXPIRED = "expired", "Expired"
+
+    class CloseReason(models.TextChoices):
+        DECLINED = "declined", "Declined by participant"
+        REPORTED = "reported", "Reported safety issue"
+
+    HOLDING_STATUSES = (Status.CHATTING, Status.AGREED)
 
     post = models.ForeignKey(ActivityPost, on_delete=models.CASCADE, related_name="matches")
     poster = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="posted_matches")
@@ -133,12 +160,26 @@ class Match(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.CHATTING)
     poster_agreed = models.BooleanField(default=False)
     swiper_agreed = models.BooleanField(default=False)
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="closed_matches",
+        null=True,
+        blank=True,
+    )
+    close_reason = models.CharField(max_length=20, choices=CloseReason.choices, blank=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     chat_expires_at = models.DateTimeField()
 
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=["post", "swiper"], name="unique_match_per_post_swiper"),
+        ]
+        indexes = [
+            models.Index(fields=["status", "chat_expires_at"], name="match_status_exp_idx"),
+            models.Index(fields=["poster", "status", "created_at"], name="match_poster_status_idx"),
+            models.Index(fields=["swiper", "status", "created_at"], name="match_swiper_status_idx"),
         ]
         ordering = ["-created_at"]
 
@@ -173,6 +214,8 @@ class Match(models.Model):
 
 
 class ChatMessage(models.Model):
+    """Message inside a match; system messages are AI-generated icebreakers."""
+
     match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="messages")
     sender = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -188,12 +231,17 @@ class ChatMessage(models.Model):
 
     class Meta:
         ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["match", "id"], name="chat_match_id_idx"),
+        ]
 
     def __str__(self):
         return self.message[:60]
 
 
 class LLMLog(models.Model):
+    """Audit trail for AI calls and deterministic fallbacks."""
+
     class TaskType(models.TextChoices):
         PARSE_POST = "parse_post", "Parse post"
         ICEBREAKER = "icebreaker", "Icebreaker"

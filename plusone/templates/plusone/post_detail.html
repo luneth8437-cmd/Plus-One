@@ -13,6 +13,7 @@
       <span>{{ post.location.name }}</span>
       <span>{{ post.location.area }}</span>
       <span>{{ post.start_time|date:"M j, H:i" }}</span>
+      <span>{{ post.spots_remaining }} spot{{ post.spots_remaining|pluralize }} left</span>
       <span>{{ post.get_status_display }}</span>
     </div>
     {% if post.user_id == user.id %}

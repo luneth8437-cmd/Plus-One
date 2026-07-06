@@ -3,9 +3,9 @@
 {% block content %}
 <section class="hero compact">
   <div>
-    <p class="eyebrow">Nearby now</p>
-    <h1>Find a Plus One for a campus plan.</h1>
-    <p class="lead">Swipe on time-sensitive activity cards with your temporary identity. A right swipe opens a short anonymous vibe chat when there is a match.</p>
+    <p class="eyebrow">Decision queue</p>
+    <h1>Pick one plan. Decide fast.</h1>
+    <p class="lead">Browse live campus plans with a temporary identity. Skip what is not right, or join to open a five-minute anonymous vibe chat.</p>
   </div>
   <a class="primary-action" href="{% url 'create_post' %}">Create a Plus One</a>
 </section>
@@ -54,12 +54,26 @@
   </section>
 {% endif %}
 
-<section class="card-grid">
+{% if undo_pass_post %}
+  <section class="undo-pass-banner" role="status" aria-label="Undo last pass">
+    <div>
+      <strong>Last card skipped: {{ undo_pass_post.title }}</strong>
+      <span>Undo if that was a mis-tap. This stays available while you keep browsing.</span>
+    </div>
+    <form method="post" action="{% url 'undo_pass' undo_pass_post.id %}">
+      {% csrf_token %}
+      <button class="secondary-action compact" type="submit">Undo pass</button>
+    </form>
+  </section>
+{% endif %}
+
+<section class="card-grid decision-grid">
   {% for post in posts %}
-    <article class="activity-card color-{{ post.activity_type }}{% if post.user_id == user.id %} own-card{% endif %}">
+    <article class="activity-card decision-card color-{{ post.activity_type }}{% if post.user_id == user.id %} own-card{% endif %}">
       <div class="card-meta">
         <span>{{ post.get_activity_type_display }}</span>
-        <span class="countdown" data-deadline="{{ post.expire_time|date:'c' }}">--</span>
+        <span>{{ post.spots_remaining }} spot{{ post.spots_remaining|pluralize }} left</span>
+        <span>expires in <span class="countdown" data-deadline="{{ post.expire_time|date:'c' }}">--</span></span>
       </div>
       <h2>{{ post.title }}</h2>
       <p>{{ post.description|truncatechars:130 }}</p>
@@ -79,7 +93,7 @@
           <a class="primary-action" href="{% url 'edit_post' post.id %}">Edit this card</a>
         </div>
       {% else %}
-        <div class="swipe-row">
+        <div class="swipe-row decision-actions">
           <form method="post" action="{% url 'swipe_post' post.id %}">
             {% csrf_token %}
             <button class="round pass" name="action" value="pass" aria-label="Pass">×</button>
@@ -93,10 +107,28 @@
       {% endif %}
     </article>
   {% empty %}
-    <section class="empty-state">
-      <h2>No active cards in your queue.</h2>
-      <p>Create the next campus plan and let another temporary identity discover it.</p>
-      <a class="primary-action" href="{% url 'create_post' %}">Create one now</a>
+    <section class="empty-state discover-empty">
+      <div>
+        <p class="eyebrow">Queue is quiet</p>
+        <h2>No cards are ready for this queue.</h2>
+        {% if filters_active %}
+          <p>Your filters may be hiding live plans. Clear them, or start the next campus plan yourself.</p>
+        {% else %}
+          <p>Start the next campus plan, or refresh in a moment as new temporary cards go live.</p>
+        {% endif %}
+      </div>
+      <div class="empty-state-actions">
+        <a class="primary-action" href="{% url 'create_post' %}">Start a Plus One</a>
+        {% if filters_active %}
+          <a class="details" href="{% url 'discover' %}">Clear filters</a>
+        {% endif %}
+        <a class="details" href="{% url 'discover' %}">See latest cards</a>
+      </div>
+      <div class="empty-state-hints" aria-label="What happens next">
+        <span>New cards appear as students post.</span>
+        <span>Skipped cards can be restored right after a pass.</span>
+        <span>Matches open a short anonymous chat.</span>
+      </div>
     </section>
   {% endfor %}
 </section>
