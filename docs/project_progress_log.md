@@ -861,3 +861,45 @@ Technical decisions:
 
 - Use a temporary local database for repeatable product demo recording.
 - Keep the GIF compact enough to load comfortably on the GitHub README.
+
+## 2026-07-06: Two-Person Flow GIF Replacement
+
+Problem or confusion:
+
+- The first README GIF showed the path through the app, but it felt like a single-user clickthrough.
+- It did not clearly communicate that Plus One is a two-person interaction.
+
+Diagnosis:
+
+- The original GIF used one full-page frame at a time, so the poster and matcher perspectives were not visible together.
+- The product value depends on seeing Student A create a card and Student B independently discover, match, chat, and agree.
+
+Changed:
+
+- Re-recorded the demo with two anonymous browser contexts.
+- Composited each step into a labeled side-by-side frame:
+  - Student A creates and publishes.
+  - Student B discovers and taps interest.
+  - Student A sees a waiting chat.
+  - Student B gets the match modal.
+  - Both enter chat.
+  - One person agrees, then the other agrees.
+  - Both see the meet handoff and dashboard state.
+- Replaced `docs/screenshots/plus-one-flow.gif` with the two-person version.
+- Updated the README image alt text to describe the two-student flow.
+
+Worked:
+
+- The new GIF is about 469KB and visibly shows the two sides of the interaction.
+
+Current status:
+
+- The README demo now communicates both the product flow and the core one-to-one matching model.
+
+Next step:
+
+- Push the replacement GIF and README alt-text update to GitHub.
+
+Technical decisions:
+
+- Keep the demo as a concise storyboard-style GIF rather than a long screen recording, because the repository README needs fast scanning.
