@@ -743,3 +743,39 @@ Next step:
 Technical decisions:
 
 - Prefer free Render resources for the first public validation, then upgrade the database before relying on durable user data.
+
+## 2026-07-06: Public Repository Presentation Update
+
+Problem or confusion:
+
+- The user wanted other people to understand the project quickly and star the GitHub repository.
+- The repository page had no About description, website, or topics, and the README did not surface the live demo in the first screen.
+
+Diagnosis:
+
+- The public repo was already deployed and star-able.
+- GitHub About metadata is managed through repository settings, while README content is part of the codebase and can be updated through git.
+
+Changed:
+
+- Added a concise product description at the top of `README.md`.
+- Added the live Render demo URL near the top of `README.md`.
+- Added the GitHub repo URL and a polite GitHub Star prompt.
+- Added a short `Why Plus One` section and a compact tech stack list.
+
+Worked:
+
+- The README now communicates the product, live demo, and core technical credibility before the setup instructions.
+
+Current status:
+
+- README content is ready to push to the public repository.
+- GitHub About metadata still needs to be filled in the repository UI if API metadata editing is unavailable.
+
+Next step:
+
+- Push the README update, then set the repository About description, website, and topics in GitHub.
+
+Technical decisions:
+
+- Keep the star prompt polite and secondary; the first priority is showing a working live demo and clear product value.

@@ -1,6 +1,25 @@
 # Plus One
 
-Plus One is a Django-native campus activity matcher. Students get a temporary anonymous identity, create time-limited activity posts, swipe on nearby plans, match with interested users, and enter a five-minute anonymous chat before deciding to meet.
+Plus One is an AI-assisted anonymous campus activity matcher. Create a temporary card, match with another student, chat briefly, and decide whether to meet.
+
+Live demo: https://plusone-ub3w.onrender.com/
+
+GitHub repo: https://github.com/luneth8437-cmd/Plus-One
+
+If you find the idea useful, a GitHub Star helps other people discover the project.
+
+## Why Plus One
+
+Campus plans often fail because students do not know who is free right now, who wants the same activity, or whether the vibe is safe enough to meet. Plus One turns a casual sentence into a temporary campus card, matches one interested student, opens a short anonymous chat, and only reveals a meet handoff after both people agree.
+
+## Tech Stack
+
+- Django 5
+- PostgreSQL
+- DeepSeek API through an OpenAI-compatible client
+- Render deployment
+- WhiteNoise static serving
+- Gunicorn + Uvicorn
 
 ## Product Capabilities
 
