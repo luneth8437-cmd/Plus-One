@@ -10,7 +10,7 @@ Do not invent user quotes, metrics, or model results. Use these files as the ope
 | --- | --- | --- |
 | [01_user_interviews.md](01_user_interviews.md) | Understand how students currently find meal, study, sport, and event companions. | Detailed 8-interview record and evidence synthesis logged |
 | [02_mechanism_comparison.md](02_mechanism_comparison.md) | Compare the decision mechanics behind Plus One and adjacent products. | Draft framework |
-| [03_usability_test_report.md](03_usability_test_report.md) | Record whether users can complete the full create-match-chat-handoff flow. | Ready to run |
+| [03_usability_test_report.md](03_usability_test_report.md) | Record whether users can complete the full create-match-chat-handoff flow. | 10-session usability report logged |
 | [04_analytics_event_plan.md](04_analytics_event_plan.md) | Define the minimum funnel events needed before real launch testing. | Draft framework |
 | [05_ai_evaluation_results.md](05_ai_evaluation_results.md) | Measure parsing and moderation quality across realistic samples. | Ready to run |
 | [06_product_decision_log.md](06_product_decision_log.md) | Explain the core product choices behind the MVP. | Interview-backed decisions and activity-specific card structure added |

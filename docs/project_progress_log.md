@@ -1387,3 +1387,72 @@ Current status:
 Next step:
 
 - Run 5-10 user sessions on the live demo, then fill participant results, success metrics, top usability issues, highest-impact fix, and portfolio evidence.
+
+## 2026-07-06: Add 10-Session Usability Test Report
+
+Problem or confusion:
+
+- The user provided a usability test report for `docs/product_validation/03_usability_test_report.md`.
+- The existing document was a clean template after simulated content had been removed, but it still contained only `TBD` placeholders.
+
+Diagnosis:
+
+- The new report should replace placeholders with observed results across the full Plus One loop:
+  - Discover,
+  - Create,
+  - Review and publish,
+  - second anonymous identity,
+  - Interested,
+  - chat,
+  - first message,
+  - mutual agreement,
+  - handoff,
+  - Dashboard state.
+
+Changed:
+
+- Replaced the usability test template with a 10-session usability report.
+- Added success metrics:
+  - 9/10 create-card flow completion,
+  - 9/10 match creation,
+  - 9/10 first message sent,
+  - 9/10 handoff viewed,
+  - 6/10 no-explanation primary flow,
+  - 0 critical safety confusion cases.
+- Added participant-level results for U1-U10.
+- Added task-level observations, observation checklist results, top usability issues, highest-impact fix, secondary fixes, and portfolio evidence.
+- Updated `docs/product_validation/README.md` status for the usability report.
+
+Worked:
+
+- The full product loop appears usable for most sessions: 9/10 reached handoff.
+- Safety guidance did not create critical confusion.
+- The report identifies concrete next product work rather than only saying the flow works.
+
+Failed or exposed:
+
+- AI/casual-text draft reliability is the largest risk:
+  - U1-U5 missed start time,
+  - U3 generated a 1440-minute expiry and could not publish,
+  - U6-U10 shifted explicit July 8 requests to Jul 7.
+- Match-to-chat transition is not strong enough after Interested.
+- Mutual agreement state needs a clearer two-person checklist.
+- Dashboard naming causes hesitation because navigation says `My Plus Ones`.
+- Chat timer showing `--` looks broken.
+
+Current status:
+
+- `03_usability_test_report.md` now contains real usability-report content rather than a placeholder template.
+- The highest-impact next fix is defensive review validation before publishing.
+
+Next step:
+
+- Implement the highest-priority usability fixes:
+  - highlight missing required draft fields,
+  - validate parsed date/time against user text,
+  - cap generated expiry values,
+  - show clear inline publish blockers,
+  - improve Interested-to-chat transition,
+  - add a two-person agreement checklist,
+  - fix the chat timer display,
+  - clarify Dashboard naming.
