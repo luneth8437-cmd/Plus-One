@@ -1264,3 +1264,88 @@ Technical decisions:
 
 - Keep interview content anonymized.
 - Keep interview-derived product decisions separate from implementation tickets so the evidence chain stays readable.
+
+## 2026-07-06: Add Interview Evidence Synthesis
+
+Problem or confusion:
+
+- The user provided a Step 3 interview evidence synthesis that condensed eight interviews into five evidence categories:
+  - user scenarios,
+  - current alternatives,
+  - pain points,
+  - trust concerns,
+  - product opportunities.
+- The existing product validation pack already preserved participant-level notes, but the cross-interview evidence chain needed a clearer interview-to-product-decision synthesis.
+
+Diagnosis:
+
+- The new synthesis is useful for interviews and portfolio storytelling because it connects user quotes to product positioning, card structure, AI role, safety boundaries, and cold-start risk.
+- The right scope was documentation only; no product UI or backend behavior was changed.
+
+Changed:
+
+- Replaced the shorter real interview synthesis in `docs/product_validation/01_user_interviews.md` with a structured five-category `Interview Evidence Synthesis`.
+- Added activity-specific card field guidance to `docs/product_validation/06_product_decision_log.md`.
+- Updated `docs/product_validation/README.md` artifact statuses.
+
+Worked:
+
+- The validation evidence now reads at four levels:
+  - participant summary table,
+  - detailed interview records,
+  - five-category evidence synthesis,
+  - interview-backed product decisions.
+- The product opportunity is now easier to state: Plus One is strongest as a low-pressure, time-sensitive, activity-based, one-to-one campus coordination tool.
+
+Failed or abandoned:
+
+- Did not implement UI changes from the synthesis yet.
+- Did not add real analytics results or usability-test outcomes in this step.
+
+Current status:
+
+- The interview evidence section is stronger for interview preparation and portfolio explanation.
+- The remaining validation gaps are still real usability testing, analytics implementation/results, and deeper AI evaluation results.
+
+Next step:
+
+- Convert the most important validated decisions into product UI updates:
+  - activity-first first-screen copy,
+  - better Discover empty state,
+  - activity-specific create examples,
+  - visible safety cues in Create, Chat, and Handoff.
+
+## 2026-07-06: Remove Simulated Interview Content from User Interview Record
+
+Problem or confusion:
+
+- The user clarified that `docs/product_validation/01_user_interviews.md` should now serve as a real user interview record.
+- The file still contained earlier synthetic pilot notes and agent role-play material, clearly labeled as not real user evidence.
+
+Diagnosis:
+
+- Keeping simulated material in the same file creates evidence hygiene risk for interviews, portfolio review, and GitHub readers.
+- The cleanest fix is to remove the simulated sections from the real interview record rather than relabel them.
+
+Changed:
+
+- Removed `Simulated Pilot Notes`.
+- Removed `Simulated Synthesis`.
+- Removed `Role-Play Interview Fill`.
+- Verified the file no longer contains `synthetic`, `role-play`, `simulated`, `not real`, `not validated`, or similar markers.
+
+Worked:
+
+- `01_user_interviews.md` now contains the interview script/protocol, eight anonymized interview records, and interview evidence synthesis only.
+
+Failed or abandoned:
+
+- Did not move the removed simulated notes into a separate hypothesis file because the current goal was to make the interview record clean.
+
+Current status:
+
+- The user interview artifact can now be treated as the real interview record for Plus One, subject to the normal caveat that the interviews are anonymized and do not claim broad market validation.
+
+Next step:
+
+- If needed, create a separate `research_hypotheses.md` later for brainstormed or simulated insights, clearly separated from real evidence.

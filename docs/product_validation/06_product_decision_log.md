@@ -27,6 +27,18 @@ These decisions come from eight anonymized student interviews recorded in `01_us
 | Cold start needs explicit empty-state design | P2 and P8 said an empty Discover queue would make them close the product or feel the product is useless. | Empty state should invite creation and set expectations: "No active plans right now. Create a quick card for lunch, study, coffee, sports, or language practice - most plans are meant for the next 30-120 minutes." | Showing activity signals too early can mislead if the supply is still low. | Once analytics exists, revisit based on card impression count, create-start rate from empty state, and return visits. |
 | AI-assisted creation is a pressure-reduction feature | P3 and P8 said AI draft helps turn awkward intent into a clear invitation. | Position AI as helping users express a low-pressure campus plan, not as a novelty or autonomous publisher. Product meaning: "Helping users turn awkward intent into a clear, low-pressure campus invitation." | AI can misparse time, location, or intent. | Keep manual review before publishing until AI evaluation shows consistently high accuracy. |
 
+## Activity-Specific Card Structure
+
+The interview synthesis showed that "specific enough to trust" differs by activity type. The MVP can keep one simple card model, but the create flow and AI draft should nudge users toward these details.
+
+| Activity type | Information users need before tapping Interested | Product implication |
+| --- | --- | --- |
+| Lunch / Coffee | Time, location, expected duration | Examples and AI output should avoid vague "hang out" phrasing and include a concrete campus place. |
+| Study | Location, start time, duration, quiet study vs discussion | Study cards should make intent clear so users do not worry the other person wants casual chatting. |
+| Sports | Sport type, place, time, skill level, court/equipment status | Sports cards need practical details because the chat is mainly for confirmation. |
+| Language practice | Language pair, time, place, practice mode | Position as low-pressure practice, not dating or open-ended socializing. |
+| Campus event | Event name, meeting point, start time, whether to enter together | Keep the product as companion-finding, not full event management. |
+
 ## Open Questions
 
 - Should anonymous sessions eventually become verified student sessions?
