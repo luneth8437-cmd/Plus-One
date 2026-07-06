@@ -39,6 +39,20 @@ The interview synthesis showed that "specific enough to trust" differs by activi
 | Language practice | Language pair, time, place, practice mode | Position as low-pressure practice, not dating or open-ended socializing. |
 | Campus event | Event name, meeting point, start time, whether to enter together | Keep the product as companion-finding, not full event management. |
 
+## Usability-Test-Backed Product Decisions
+
+These decisions come from the 10-session usability report in `03_usability_test_report.md`.
+
+| Decision | Usability evidence | Chosen direction | Tradeoff | Future revisit condition |
+| --- | --- | --- | --- | --- |
+| Post-draft review must be defensive | U1-U5 missed start time, U3 hit a 1440-minute expiry, and U6-U10 saw July 8 shift to Jul 7. | Highlight missing required fields, validate parsed date/time against original text, cap generated expiry values, and block Publish with a clear inline message until valid. | More validation can slow down posting. | If retesting shows users understand and correct fields without blockers, loosen only low-risk warnings. |
+| AI remains assistive, not autonomous | Filled fields increased user trust even when date parsing was wrong. | Keep manual review before publish and treat AI-generated fields as provisional. | Users may expect AI to fully handle formatting. | Revisit only after a dedicated AI benchmark shows consistently reliable date/time and required-field handling. |
+| Interested-to-chat needs a stronger transition | U7 created a match but had to look for the chat button. | Make Open chat the primary next step after a match, or test auto-opening chat. | Auto-open could surprise users who want to continue browsing. | Use `match_created -> open_chat_clicked` data to decide between sticky CTA and auto-open. |
+| Mutual agreement should be shown as a checklist | U4 understood the state only after reading "You agreed: yes / Match agreed: no." | Show `You agreed`, `Other person agreed`, and `Handoff ready` as a visible two-person checklist. | More UI state can add visual weight to chat. | If users explain the one-sided and two-sided states correctly in retest, the checklist is working. |
+| Dashboard naming should match task language | U5 and U10 hesitated because the nav says `My Plus Ones`, while the task said Dashboard. | Use Dashboard wording in nav or page header, such as `My Plus Ones / Dashboard`. | Product-brand language becomes slightly less clean. | Revisit after measuring whether users find ready-to-meet plans without facilitator hints. |
+| Chat timer must never show a broken state | The chat timer displayed "--" during the run and looked unfinished. | Show a real countdown, expired state, or agreed state; never leave placeholder timer text visible. | Requires more state handling across chat lifecycle. | Revisit after testing active, expired, and agreed match states. |
+| Pass and Interested need first-use labels | U8 understood the heart but read icon-only x as close/delete. | Add labels or first-use tooltips for Pass and Interested. | Labels may reduce the minimal swipe-like feel. | Revisit once first-time users can explain both controls without context. |
+
 ## Open Questions
 
 - Should anonymous sessions eventually become verified student sessions?
@@ -54,7 +68,7 @@ The interview synthesis showed that "specific enough to trust" differs by activi
 Revisit these choices after:
 
 - 5-8 discovery interviews. Completed first pass: eight anonymized student interviews added on 2026-07-06.
-- 5-10 usability tests.
+- 5-10 usability tests. Completed first pass: 10-session usability report added on 2026-07-06.
 - First live demo feedback round.
 - First analytics event implementation.
 - First real moderation false positive or false negative review.

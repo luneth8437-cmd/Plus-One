@@ -1456,3 +1456,74 @@ Next step:
   - add a two-person agreement checklist,
   - fix the chat timer display,
   - clarify Dashboard naming.
+
+## 2026-07-07: Align Product Validation Docs 04-07 With Real Evidence
+
+Problem or confusion:
+
+- After `01_user_interviews.md`, `02_mechanism_comparison.md`, and `03_usability_test_report.md` became stronger evidence artifacts, the later validation docs were uneven.
+- `05_ai_evaluation_results.md` and `07_iteration_case_studies.md` still contained role-play or placeholder-oriented material.
+- `04_analytics_event_plan.md` and `06_product_decision_log.md` had not yet absorbed the 10-session usability findings.
+
+Diagnosis:
+
+- The product validation pack should read as one evidence chain:
+  - interviews identify needs,
+  - mechanism comparison explains design choices,
+  - usability testing exposes flow and AI risks,
+  - analytics defines how to measure those risks after launch,
+  - AI evaluation records current AI limitations,
+  - decision log captures product choices,
+  - iteration cases turn evidence into a roadmap.
+
+Changed:
+
+- Rewrote `docs/product_validation/05_ai_evaluation_results.md` around usability-observed AI risks:
+  - missing start time,
+  - July 8 to Jul 7 date shift,
+  - 1440-minute expiry,
+  - need for defensive review validation,
+  - dedicated AI benchmark still needed.
+- Rewrote `docs/product_validation/07_iteration_case_studies.md` with real-evidence iteration cases:
+  - AI draft review validation,
+  - Interested-to-chat transition,
+  - mutual agreement checklist,
+  - Dashboard naming,
+  - chat timer state,
+  - Pass/Interested labels,
+  - concise safety copy,
+  - one-to-one positioning.
+- Updated `docs/product_validation/06_product_decision_log.md` with `Usability-Test-Backed Product Decisions`.
+- Updated `docs/product_validation/04_analytics_event_plan.md` with usability-driven events:
+  - `draft_missing_required_field`,
+  - `date_mismatch_warning_shown`,
+  - `expiry_value_corrected`,
+  - `publish_blocked`,
+  - `open_chat_clicked`,
+  - `agreement_state_viewed`,
+  - `dashboard_viewed`,
+  - `chat_timer_error`.
+- Updated `docs/product_validation/README.md` statuses for 04-07.
+
+Worked:
+
+- Later validation docs now reflect the real interview and usability evidence rather than earlier dry-run framing.
+- The evidence chain now connects user need, mechanism choice, usability risk, analytics plan, AI limitations, product decisions, and iteration roadmap.
+
+Failed or abandoned:
+
+- Did not claim a full dedicated AI benchmark has already been completed.
+- Did not implement analytics events or product UI fixes in code.
+- Did not push these document updates yet.
+
+Current status:
+
+- `04_analytics_event_plan.md` is ready as a launch measurement plan.
+- `05_ai_evaluation_results.md` is a clean current evidence report plus benchmark plan, not a simulated result table.
+- `06_product_decision_log.md` now reflects both interviews and usability testing.
+- `07_iteration_case_studies.md` is ready for portfolio use as evidence-backed iteration cases.
+
+Next step:
+
+- Implement the highest-priority product fixes from the usability report, then rerun a smaller usability retest.
+- Separately run a dedicated AI parsing/moderation benchmark and fill real model outputs if stronger AI claims are needed.

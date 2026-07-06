@@ -1,143 +1,209 @@
 # Iteration Case Studies
 
-Goal: show that Plus One improved through observed problems, not just feature accumulation.
+Goal: show that Plus One improved, and should keep improving, through observed evidence rather than feature accumulation.
 
-Use this format for portfolio or README evidence:
+Format:
 
 ```text
 Problem -> Evidence -> Solution -> Validation
 ```
 
-## Case 1: Pass Needed Recovery
+Evidence sources:
+
+- `01_user_interviews.md`: eight anonymized student interviews and interview evidence synthesis.
+- `03_usability_test_report.md`: 10-session usability report for the full create-match-chat-agree-handoff-dashboard loop.
+
+## Case 1: AI Draft Review Must Be Defensive
 
 Problem:
 
-- Passing a card was too final for a fast, swipe-like interface.
+- AI-assisted creation can make posting easier, but users may trust incorrect structured fields.
 
 Evidence:
 
-- Internal product walkthroughs showed that accidental pass actions created avoidable dead ends.
+- U1-U5 needed manual time fixes after casual-text drafting.
+- U3 received a draft with missing start time and a 1440-minute expiry, then publish stayed on the create form.
+- U6-U10 used explicit date/time, but July 8 became Jul 7 in the structured card.
+- U6 said: "This one filled the time, so I trust the draft more."
 
 Solution:
 
-- Added an undo path for the most recent skipped active card.
+- Planned: highlight missing required fields after draft.
+- Planned: validate parsed date/time against the user's original text.
+- Planned: cap generated expiry values.
+- Planned: block Publish with a clear inline message until the card is valid.
 
 Validation:
 
-- Automated tests cover pass and undo behavior.
-- Real user validation still needed.
+- Current evidence: usability report identified this as the highest-impact fix.
+- Next validation: rerun create-task usability sessions and measure whether users can publish accurate cards without facilitator help.
 
-## Case 2: Dashboard Needed State Clarity
+## Case 2: Interested Should Lead More Directly To Chat
 
 Problem:
 
-- Active cards, open chats, handoffs, and closed activity were easy to confuse when shown as generic lists.
+- After a user taps Interested, the match is created but the next step is not visually strong enough.
 
 Evidence:
 
-- Product walkthroughs found that users needed to know what required action now versus what was only history.
+- U7 completed the match but said: "The match happened, but I had to look for the chat button."
+- Task-level observation: Interested created a match, but the user remained on Discover with an Open chat CTA.
 
 Solution:
 
-- Reworked Dashboard into state-based panels: open decisions, live cards, meet handoffs, and closed activity.
+- Planned: make Open chat the primary next step after a match.
+- Option to test: auto-open chat after successful match creation.
+- If auto-open feels too abrupt, make a sticky Open chat action visually dominant.
 
 Validation:
 
-- Dashboard status tests pass.
-- Real usability test should ask users what they would do next from each panel.
+- Measure `match_created -> open_chat_clicked` conversion.
+- In usability retest, ask whether users know what to do immediately after Interested.
 
-## Case 3: Decline and Report Needed Separation
+## Case 3: Mutual Agreement Needs A Two-Person Checklist
 
 Problem:
 
-- Ending a chat and reporting unsafe behavior are different user intentions.
+- The product requires both users to agree before handoff, but the one-sided agreement state is too text-heavy.
 
 Evidence:
 
-- Product review found that combining them would make normal rejection feel too severe and unsafe reports too hidden.
+- U4 said: "I agreed, but it says the other person has not agreed, so we are not done yet."
+- Task-level observation: one-sided agreement displays "You agreed: yes / Match agreed: no", which users must read carefully.
 
 Solution:
 
-- Kept decline as a normal match decision and report as a safety action.
+- Planned: show a two-person agreement checklist:
+  - You agreed.
+  - Other person agreed.
+  - Handoff ready.
 
 Validation:
 
-- Permission and moderation tests pass.
-- Real users should be asked whether the distinction is clear.
+- Measure `agree_clicked` by first user to second-user agreement completion.
+- In usability retest, ask users to explain whether the meeting is ready after only one side agrees.
 
-## Case 4: AI Language Needed User-Facing Copy
+## Case 4: Dashboard Naming Should Match User Tasks
 
 Problem:
 
-- Showing terms like `LLMLog`, raw fallback output, or model-shaped JSON made the product feel like a debug tool.
+- Users can find the state page, but the navigation label `My Plus Ones` does not match the task language `Dashboard`.
 
 Evidence:
 
-- Manual testing showed raw AI/fallback output appearing directly below the create form.
+- U5 said: "Where is Dashboard? Oh, maybe My Plus Ones is the dashboard."
+- U10 said: "Ready to meet is clear once I find My Plus Ones."
 
 Solution:
 
-- Removed raw output from the main user flow and replaced technical copy with product language.
+- Planned: use Dashboard wording in the nav or page header.
+- Candidate label: `My Plus Ones / Dashboard`.
+- Keep the product meaning of "My Plus Ones" but make the functional destination obvious.
 
 Validation:
 
-- Create flow now focuses on drafting, review, and publish.
-- Real users should be asked whether AI assistance is understandable without technical explanation.
+- Measure dashboard visits after mutual agreement.
+- In usability retest, ask users where they would go to check ready-to-meet plans.
 
-## Case 5: Live Cards Needed Layout Stability
+## Case 5: Chat Timer Must Not Look Broken
 
 Problem:
 
-- Live card content could collapse into narrow, irregular shapes, making the Dashboard look broken.
+- A five-minute chat timer supports the product concept, but a broken-looking timer lowers confidence.
 
 Evidence:
 
-- Manual testing produced a live card with title and metadata wrapping into unusable columns.
+- Task-level observation: messages appeared in anonymous chat, but the chat timer displayed "--" during the run.
+- Observation checklist: the timer showing "--" looked broken and reduced confidence.
 
 Solution:
 
-- Stabilized Dashboard card layout and removed mismatched capacity language from the one-to-one product model.
+- Planned: ensure the chat timer always shows a valid countdown or a clear expired/ready state.
+- Add a fallback label only when the match has no active countdown.
 
 Validation:
 
-- Manual visual review passed after the layout change.
-- Add a screenshot test or visual checklist for long titles before launch.
+- Add a visual/manual checklist for active chat, expired chat, and agreed handoff states.
+- In usability retest, ask whether the timer feels helpful, stressful, or broken.
 
-## Case 6: Time Ambiguity Needed Confirmation
+## Case 6: Pass And Interested Need Clearer First-Use Meaning
 
 Problem:
 
-- Inputs such as "tomorrow at 7" could be interpreted as morning or evening without user intent.
+- The heart for Interested is understandable, but an icon-only x can be read as close/delete instead of Pass.
 
 Evidence:
 
-- Manual tests showed the review form picking a time even when AM/PM was not specified.
+- U8 said: "The heart is clear; the x still feels like close or delete."
+- Observation checklist: Interested and Pass were only partially clear.
 
 Solution:
 
-- Added ambiguity handling so users can confirm morning or evening instead of silently accepting an assumption.
+- Planned: add text labels or first-use tooltips for Pass and Interested.
+- Keep the fast decision model, but reduce ambiguity for new users.
 
 Validation:
 
-- Tests cover ambiguous time handling.
-- Real usability tests should check whether users notice and understand the confirmation.
+- Observe whether first-time users can explain both controls before tapping them.
+- Measure pass/undo rate after label changes.
 
-## Role-Play Feedback Evidence
+## Case 7: Safety Copy Should Stay Concise And Visible
 
-Date: 2026-07-06
+Problem:
 
-Source: five role-play product flows plus runtime AI evaluation. This is not real student evidence, but it is useful as a pre-test backlog.
+- Anonymous meetups create mild concern, but heavy safety copy could make the product feel risky.
 
-| Finding | Evidence | Product implication |
-| --- | --- | --- |
-| The full create-match-chat-agree-dashboard path works for all five target contexts. | 5/5 role-play flows reached `agreed` match status and opened Dashboard successfully. | Keep the current core flow stable while improving copy and edge cases. |
-| One-to-one positioning must stay explicit. | Sports role-play fit tennis/light practice but raised group-sport expectation risk. | Avoid adding `people needed`; reinforce "find one companion." |
-| `handoff` may be too internal as user-facing language. | Language/coffee role-play expected "meeting details" after both users agree. | Consider renaming public copy while keeping internal model names unchanged. |
-| Mixed-intent AI parsing needs guardrails. | DeepSeek classified coffee before bus as `explore`, and language practice over coffee as `other` at `Student Center`. | Add post-processing or prompt examples for coffee, commute, and language practice. |
-| Safety moderation is currently stronger than parsing in the small role-play run. | 5/5 safety samples matched expected allow/block behavior; parsing was 3/5 for activity and 4/5 for location. | Prioritize parser quality before expanding AI automation. |
+Evidence:
 
-## Next Cases To Add
+- Success metrics: 0 critical safety confusion cases; 5/10 had mild concerns about anonymous meetups.
+- U9 said: "The public-place reminder makes the meetup feel less sketchy."
+- Interviews showed users accept anonymity only when there are clear boundaries.
 
-- Safety blocked example from real moderation testing.
-- First live user feedback case.
-- Analytics-driven funnel improvement after event tracking exists.
+Solution:
+
+- Keep concise safety copy in chat and handoff.
+- Keep Decline and Report safety issue visibly separate.
+- Future launch consideration: verified student identity without forcing public profiles.
+
+Validation:
+
+- Track report/decline use separately.
+- In future tests, ask whether safety copy feels reassuring or alarming.
+
+## Case 8: One-to-One Positioning Must Stay Explicit
+
+Problem:
+
+- Some activities, especially sports, can create group expectations, but Plus One is intentionally one-to-one.
+
+Evidence:
+
+- Interviews showed users valued one companion for meals, study, coffee, language practice, and campus events.
+- The usability report found that users understood the broad concept, but Discover still felt like a swipe queue to U1.
+
+Solution:
+
+- Keep one-line product promise visible: one student, one campus plan.
+- Avoid capacity language such as `people needed`.
+- Use activity examples that reinforce one companion rather than group formation.
+
+Validation:
+
+- In future tests, ask what users think happens after tapping Interested.
+- Watch whether sports users expect a group game or one companion.
+
+## Portfolio Summary
+
+Strongest iteration story:
+
+> The full Plus One loop works for most users, but the biggest risk is not matching or chat. It is whether users can trust AI-generated structured cards before publishing. The next product iteration should make the review step defensive, not merely editable.
+
+Evidence-backed next product priorities:
+
+1. Defensive AI draft review.
+2. Stronger Interested-to-chat transition.
+3. Two-person agreement checklist.
+4. Dashboard naming clarity.
+5. Reliable chat timer.
+6. First-use Pass/Interested labels.
+7. Concise safety copy.
