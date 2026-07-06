@@ -30,6 +30,10 @@ Campus plans often fail because students do not know who is free right now, who 
 
 ![Plus One two-student flow: Student A creates a card, Student B matches, both chat, and both agree to meet](docs/screenshots/plus-one-flow.gif)
 
+### Mobile Two-Student Flow
+
+![Plus One mobile flow: Student A creates a temporary card, Student B discovers it, they chat, and both agree to meet](docs/screenshots/plus-one-mobile-flow.gif)
+
 | Discover | Create |
 | --- | --- |
 | ![Discover page](docs/screenshots/discover.png) | ![Create page](docs/screenshots/create.png) |

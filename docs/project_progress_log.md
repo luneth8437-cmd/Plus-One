@@ -1527,3 +1527,56 @@ Next step:
 
 - Implement the highest-priority product fixes from the usability report, then rerun a smaller usability retest.
 - Separately run a dedicated AI parsing/moderation benchmark and fill real model outputs if stronger AI claims are needed.
+
+## 2026-07-07: Added Mobile Two-Student Flow GIF
+
+Problem or confusion:
+
+- The repository already had a flow GIF, but the user wanted a mobile-focused GIF uploaded to GitHub.
+- The previous portfolio direction emphasized that the GIF should show two-person interaction, not only a single-user walkthrough.
+
+Diagnosis:
+
+- A mobile demo needs to show Student A creating a card and Student B discovering, matching, chatting, and agreeing.
+- The project directory is not itself a git checkout, so the generated asset needs to be copied into a temporary clone before pushing.
+- The in-project `.venv313` was slow to import Django from the Desktop path, consistent with earlier local environment notes.
+
+Tried:
+
+- Created a temporary SQLite database at `/tmp/plusone-mobile-gif.sqlite3`.
+- Installed temporary GIF tooling in `/tmp/plusone-gif-venv`.
+- Ran Django locally on `127.0.0.1:8052` with API keys cleared so the demo uses deterministic fallback behavior.
+- Used Playwright with a 390px mobile viewport to drive two isolated anonymous browser contexts.
+- Generated a visual contact sheet from the GIF frames for inspection.
+
+Worked:
+
+- Added `docs/screenshots/plus-one-mobile-flow.gif`.
+- Updated `README.md` with a `Mobile Two-Student Flow` section.
+- The GIF shows:
+  - Student A drafting and publishing a temporary card,
+  - Student B finding the live card in Discover,
+  - Student B tapping Interested,
+  - the anonymous chat opening,
+  - both students messaging,
+  - both students agreeing,
+  - the handoff and Dashboard state.
+
+Failed or abandoned:
+
+- The first Playwright run failed because the scroll helper used a browser `arguments` reference that was not available inside `page.evaluate`.
+- The original `.venv313` migration attempt was abandoned because Django import was too slow from that local environment.
+
+Current status:
+
+- The mobile GIF is generated locally and weighs about 404 KB.
+- It has been added to the README as a mobile-specific two-student product demo.
+
+Next step:
+
+- Open the GitHub README after push and confirm the mobile GIF renders correctly.
+
+Technical decisions:
+
+- Keep the existing `plus-one-flow.gif` and add a separate mobile GIF instead of replacing the original desktop/general flow.
+- Use temporary tooling and a temporary database for asset generation so the project dependency list and local data remain unchanged.
