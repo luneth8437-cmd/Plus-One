@@ -1079,3 +1079,46 @@ Technical decisions:
 
 - Keep public project claims strong but traceable to actual evidence.
 - Avoid fabricated research claims in resume, portfolio, and GitHub materials.
+
+## 2026-07-06: Move Resume and Portfolio Materials to Local DOCX
+
+Problem or confusion:
+
+- The user decided the resume and portfolio writeups are better kept locally instead of exposed as separate public GitHub Markdown files.
+- The repository still linked to `docs/resume_project_bullets.md` and `docs/portfolio_case_study.md`.
+
+Diagnosis:
+
+- Public GitHub should keep product evidence, deployment docs, and validation artifacts.
+- Personal resume and portfolio packaging is better as a local polished document, especially while some validation evidence is still clearly labeled as role-play or pre-test evidence.
+
+Changed:
+
+- Generated `/Users/fillun/Desktop/plus-one/Plus_One_Product_Portfolio.docx` as a local portfolio document.
+- Rendered the DOCX to page images and PDF in `/tmp/plusone-docx-render` for visual QA.
+- Removed `docs/resume_project_bullets.md` and `docs/portfolio_case_study.md` from the project.
+- Removed their public README links.
+
+Worked:
+
+- The DOCX rendered successfully as a 9-page portfolio.
+- The portfolio includes product positioning, flow, AI system, validation evidence, iteration examples, screenshots, resume bullets, and claim boundaries.
+
+Failed or abandoned:
+
+- Did not commit the DOCX to GitHub.
+- Did not remove `docs/product_validation/` because those files still act as the public evidence workspace.
+
+Current status:
+
+- Resume and portfolio materials now live locally in a polished DOCX.
+- The GitHub repo is cleaner and no longer exposes those two personal Markdown files.
+
+Next step:
+
+- When real student interviews and usability tests are completed, update the local DOCX and the validation workspace with actual participant evidence.
+
+Technical decisions:
+
+- Keep personal career materials local unless the user explicitly wants them public.
+- Keep public repo claims backed by implementation, testing, and validation artifacts.
