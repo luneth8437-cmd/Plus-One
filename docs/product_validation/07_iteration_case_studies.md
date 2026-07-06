@@ -122,6 +122,20 @@ Validation:
 - Tests cover ambiguous time handling.
 - Real usability tests should check whether users notice and understand the confirmation.
 
+## Role-Play Feedback Evidence
+
+Date: 2026-07-06
+
+Source: five role-play product flows plus runtime AI evaluation. This is not real student evidence, but it is useful as a pre-test backlog.
+
+| Finding | Evidence | Product implication |
+| --- | --- | --- |
+| The full create-match-chat-agree-dashboard path works for all five target contexts. | 5/5 role-play flows reached `agreed` match status and opened Dashboard successfully. | Keep the current core flow stable while improving copy and edge cases. |
+| One-to-one positioning must stay explicit. | Sports role-play fit tennis/light practice but raised group-sport expectation risk. | Avoid adding `people needed`; reinforce "find one companion." |
+| `handoff` may be too internal as user-facing language. | Language/coffee role-play expected "meeting details" after both users agree. | Consider renaming public copy while keeping internal model names unchanged. |
+| Mixed-intent AI parsing needs guardrails. | DeepSeek classified coffee before bus as `explore`, and language practice over coffee as `other` at `Student Center`. | Add post-processing or prompt examples for coffee, commute, and language practice. |
+| Safety moderation is currently stronger than parsing in the small role-play run. | 5/5 safety samples matched expected allow/block behavior; parsing was 3/5 for activity and 4/5 for location. | Prioritize parser quality before expanding AI automation. |
+
 ## Next Cases To Add
 
 - Safety blocked example from real moderation testing.

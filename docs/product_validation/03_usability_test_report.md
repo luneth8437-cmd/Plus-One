@@ -88,6 +88,54 @@ These results are synthetic. They are useful for a dry run before recruiting rea
 | P2 | Add timer warning near final minute | Reduces stress without removing urgency | Observe chat completion and agreement rate |
 | P3 | Explore verified student mode | Improves trust for real campus launch | Validate in interviews before implementation |
 
+## Role-Play Product Use Evidence
+
+Date: 2026-07-06
+
+Method: five role-play users were run through the product with Django `Client` against a temporary SQLite database at `/tmp/plusone-roleplay.sqlite3`. The flow used server-rendered routes for create, discover, swipe, chat, agree, and dashboard. This is execution evidence for the current product path, not real human usability evidence.
+
+Product-flow command evidence:
+
+```bash
+DATABASE_URL=sqlite:////tmp/plusone-roleplay.sqlite3 \
+ALLOWED_HOSTS=127.0.0.1,localhost,testserver \
+/private/tmp/plusone-venv313/bin/python /tmp/plusone_roleplay_validation.py
+```
+
+### Role-Play Completion Table
+
+| Role-play user | Create page | Assist draft | Publish card | Visible to second identity | Interested creates match | Chat opens | First messages | Both agree | Dashboard opens | Handoff reached |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 饭搭子 | 200 | ready | yes | yes | yes | 200/200 | 2 sent | yes | 200 | yes |
+| 学习搭子 | 200 | ready | yes | yes | yes | 200/200 | 2 sent | yes | 200 | yes |
+| 运动搭子 | 200 | ready | yes | yes | yes | 200/200 | 2 sent | yes | 200 | yes |
+| 通勤学生短时间空档 | 200 | ready | yes | yes | yes | 200/200 | 2 sent | yes | 200 | yes |
+| 低压力语言练习/咖啡场景 | 200 | ready | yes | yes | yes | 200/200 | 2 sent | yes | 200 | yes |
+
+### Role-Play Metrics
+
+| Metric | Result |
+| --- | --- |
+| Role-play flows completed | 5/5 |
+| Cards published | 5/5 |
+| Cards visible to second identity | 5/5 |
+| Matches created from Interested | 5/5 |
+| Chats opened by both sides | 5/5 |
+| First-message exchange completed | 5/5 |
+| Mutual agreement reached | 5/5 |
+| Dashboard opened after agreement | 5/5 |
+| Match final state | `agreed` for all 5 |
+
+### Feedback Evidence Filled From Role-Play
+
+| Role-play user | Observed product fit | Friction or risk | Suggested iteration |
+| --- | --- | --- |
+| 饭搭子 | The temporary-card model fits quick lunch very well. | Needs the product to feel casual rather than like a formal event post. | Add more casual meal examples in Create. |
+| 学习搭子 | Structured fields help clarify study topic, place, and time. | Generic AI parsing may under-specify study mode unless prompted. | Add study prompt hints: topic, quiet/talking, duration. |
+| 运动搭子 | One-to-one works for tennis/gym/light practice. | Team sports may create expectation mismatch. | Keep "find one companion" visible on sports cards or onboarding copy. |
+| 通勤学生短时间空档 | Fast expiry and location clarity fit short campus gaps. | Users may need even stronger "active now" signals. | Prioritize recent cards and show time-left prominently. |
+| 低压力语言练习/咖啡场景 | Anonymous short chat reduces pressure. | User-facing "handoff" language may feel internal. | Rename public-facing handoff copy to "meeting details." |
+
 ## Observation Checklist
 
 - Did the user understand that cards are temporary?

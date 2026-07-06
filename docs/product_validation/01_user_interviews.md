@@ -108,6 +108,27 @@ Product changes to consider:
 - Add a short note that Plus One finds one companion, not a group.
 - Consider a verified student mode before real campus deployment.
 
+## Role-Play Interview Fill
+
+Date: 2026-07-06
+
+Method: agent role-play across five target user contexts. This is not real student research. Use it to prepare real interviews and to generate hypotheses for testing.
+
+| Role-play user | Current behavior | Failed moment | Main hesitation | Reaction to Plus One | Evidence-style quote | Product learning |
+| --- | --- | --- | --- | --- | --- | --- |
+| 饭搭子 | Usually asks known friends or posts in a small class chat. | Dinner or lunch plans fail when nobody replies quickly. | Publicly asking for a casual meal can feel needy. | Would use it when the card is temporary and the meeting is clearly low-commitment. | "For lunch, I do not want a whole social plan. I just want one person who is free now." | Keep meal cards fast, temporary, and explicit about short duration. |
+| 学习搭子 | Uses library friends, class Discord, or messages classmates. | Existing friends are busy; public channels produce unfocused replies. | Needs confidence that the other person actually wants to study. | Likes one-to-one matching if the card says topic, location, and study style. | "If it says algorithms, library, quiet table, I know whether it fits me." | Add study-specific prompts for topic, focus mode, and expected duration. |
+| 运动搭子 | Uses sports club chats or asks friends. | Team-sport requests can overfill or receive no useful reply. | Skill level, no-show risk, and whether one person is enough. | Works best for tennis, gym, running, or light practice; less clear for team sports. | "For tennis this makes sense. For basketball, I need to know if it is just one companion or a game." | Keep one-to-one positioning visible and avoid implying group formation. |
+| 通勤学生短时间空档 | Texts friends during gaps between class and transport. | Replies arrive after the useful time window is gone. | Wasting limited time and walking too far across campus. | Strong fit if the app shows active cards, location, and quick commitment. | "If I only have 40 minutes, I cannot wait in a group chat." | Expiry, location clarity, and fast handoff are central for this segment. |
+| 低压力语言练习/咖啡场景 | Rarely posts publicly; may react to stories or ask one friend. | Normal chat can feel socially heavy before knowing the vibe. | Wants a graceful exit and safety boundaries. | Likes anonymous short chat, but needs decline/report to be emotionally clear. | "I want to practice, but I need it to be easy to stop if it is awkward." | Keep Decline separate from Report and preserve anonymous-first flow. |
+
+Role-play synthesis:
+
+1. The strongest common value is reducing social risk before asking for a small, temporary plan.
+2. Each use case needs slightly different card details: meal duration, study topic, sport level, commute time window, or language comfort.
+3. The one-to-one model is a strength, but it must be explicit so users do not expect group matching.
+4. Anonymous short chat is most useful when paired with a normal decline path and a stronger safety path.
+
 ## Synthesis Template
 
 Top patterns:

@@ -989,3 +989,49 @@ Next step:
 Technical decisions:
 
 - Keep simulated data in separate labeled sections so future portfolio or README material can distinguish dry-run hypotheses from real validation.
+
+## 2026-07-06: Five-Role Product Validation Run
+
+Problem or confusion:
+
+- The user wanted five role-play users to actively use the product and fill interview, usability, AI evaluation, and feedback evidence.
+- The distinction between role-play evidence and real student evidence still needed to remain explicit.
+
+Diagnosis:
+
+- A role-play run can provide executable product evidence if it drives the actual Django routes and records status/results.
+- Real user evidence still requires recruited students; role-play should be labeled as pre-test validation.
+
+Changed:
+
+- Ran five role-play contexts: meal companion, study companion, sports companion, commuter short-gap use, and low-pressure language/coffee.
+- Used a temporary SQLite database at `/tmp/plusone-roleplay.sqlite3`.
+- Added role-play interview fill to `docs/product_validation/01_user_interviews.md`.
+- Added role-play product-use evidence to `docs/product_validation/03_usability_test_report.md`.
+- Added actual runtime DeepSeek evaluation data to `docs/product_validation/05_ai_evaluation_results.md`.
+- Added role-play feedback evidence to `docs/product_validation/07_iteration_case_studies.md`.
+
+Worked:
+
+- 5/5 role-play flows completed create, assist draft, publish, second-identity discover, Interested, match, chat, both Agree, and Dashboard.
+- Runtime AI evaluation used DeepSeek with `deepseek-v4-flash`.
+- Safety evaluation passed 5/5.
+- Parsing evaluation passed 3/5 for activity type and 4/5 for location.
+
+Failed or abandoned:
+
+- Did not treat role-play results as real student validation.
+- Did not change product code based only on role-play findings.
+
+Current status:
+
+- The product validation pack now contains filled role-play evidence and actual runtime AI evaluation data.
+
+Next step:
+
+- Validate the same five contexts with real students and decide whether to rename user-facing handoff copy and add parser guardrails for mixed-intent cards.
+
+Technical decisions:
+
+- Keep role-play evidence separate from real user evidence.
+- Keep current one-to-one matching model unchanged; role-play evidence reinforced that `people needed` should not return.
