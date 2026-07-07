@@ -1580,3 +1580,47 @@ Technical decisions:
 
 - Keep the existing `plus-one-flow.gif` and add a separate mobile GIF instead of replacing the original desktop/general flow.
 - Use temporary tooling and a temporary database for asset generation so the project dependency list and local data remain unchanged.
+
+## 2026-07-07: Removed Redundant Static README Screenshots
+
+Problem or confusion:
+
+- The GitHub README showed four static page screenshots after the project already had two GIF demos.
+- The user wanted the redundant screenshots removed so the repository presentation focuses on the richer flow demos.
+
+Diagnosis:
+
+- The static files were `docs/screenshots/discover.png`, `create.png`, `dashboard.png`, and `about.png`.
+- README still referenced those PNGs in two comparison tables under `Screenshots`.
+- The two GIFs already cover the public product demonstration:
+  - `docs/screenshots/plus-one-flow.gif`,
+  - `docs/screenshots/plus-one-mobile-flow.gif`.
+
+Tried:
+
+- Attempted to delete PNGs with `apply_patch`, but binary image files cannot be read as UTF-8 text by the patch tool.
+- Used `apply_patch` for the README text edit and `rm` for the binary PNG deletions.
+
+Worked:
+
+- Removed the static screenshot tables from `README.md`.
+- Deleted the four static PNG files locally.
+- Kept both GIF demo files.
+
+Failed or abandoned:
+
+- Did not delete the GIF files.
+- Did not change product code or documentation outside README/progress log.
+
+Current status:
+
+- `docs/screenshots/` now contains only the two GIF demos locally.
+- This is the intended repository state for the GitHub `deepseek-api` branch.
+
+Next step:
+
+- Open the GitHub README after push and confirm only the two GIF demos render in the screenshots section.
+
+Technical decisions:
+
+- Prefer two flow GIFs over separate static page screenshots for the GitHub front page because they communicate the product loop more clearly.

@@ -34,14 +34,6 @@ Campus plans often fail because students do not know who is free right now, who 
 
 ![Plus One mobile flow: Student A creates a temporary card, Student B discovers it, they chat, and both agree to meet](docs/screenshots/plus-one-mobile-flow.gif)
 
-| Discover | Create |
-| --- | --- |
-| ![Discover page](docs/screenshots/discover.png) | ![Create page](docs/screenshots/create.png) |
-
-| Dashboard | About |
-| --- | --- |
-| ![Dashboard page](docs/screenshots/dashboard.png) | ![About page](docs/screenshots/about.png) |
-
 ## Product Capabilities
 
 - Anonymous session identities with no registration or password.
