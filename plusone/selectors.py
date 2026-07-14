@@ -122,7 +122,7 @@ def dashboard_state(active_posts, open_matches, handoff_matches):
             "tone": "live",
             "eyebrow": "Live now",
             "title": post.title,
-            "body": f"{post.spots_remaining} spot{'' if post.spots_remaining == 1 else 's'} left at {post.location.name}.",
+            "body": f"One-to-one plan at {post.location.name}.",
             "deadline": post.expire_time,
         }
     if handoff_matches:

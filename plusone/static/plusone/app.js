@@ -4,7 +4,9 @@ function updateCountdowns() {
     const deadline = new Date(node.dataset.deadline);
     const delta = deadline - now;
     if (Number.isNaN(deadline.getTime())) {
-      node.textContent = "--";
+      // Never show a broken-looking "--" (usability report, case 5):
+      // fall back to a meaningful label instead.
+      node.textContent = node.dataset.fallback || "closed";
       return;
     }
     if (delta <= 0) {

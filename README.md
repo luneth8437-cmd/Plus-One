@@ -7,9 +7,35 @@ Plus One is an AI-assisted anonymous campus activity matcher. Create a temporary
 
 Live demo: https://plusone-ub3w.onrender.com/
 
+> Try it alone in ~3 minutes: the demo instance keeps a few labeled **Demo**
+> cards live. Swipe interested on one, and a demo partner replies and agrees
+> automatically, so a single visitor can experience match -> five-minute
+> anonymous chat -> AI opener suggestions -> mutual-agreement handoff.
+> (Free-tier hosting: if the page takes up to a minute on first load, the
+> instance is waking up.)
+
 GitHub repo: https://github.com/luneth8437-cmd/Plus-One
 
 If you find the idea useful, a GitHub Star helps other people discover the project.
+
+## Evidence and Metrics
+
+Every AI capability ships with a benchmark, adversarial tests, and product
+analytics. Latest measured results (2026-07-14, reproducible via
+`manage.py evaluate_ai` and `manage.py funnel_report`):
+
+| Area | Result |
+| --- | --- |
+| Draft parsing (deterministic guardrail layer) | activity type 95%, dates/times 11/11 correct, ~0ms |
+| Draft parsing (LLM pipeline) | activity type 89%, dates/times 11/11, avg 1.55s / p95 2.07s |
+| Safety moderation | precision 1.00 / recall 1.00 on the benchmark set |
+| Opening assistant | 9/9 deterministic, 8/9 LLM benchmark cases; judge scores 4.2 relevance / 3.9 naturalness / 4.9 safety (1-5) |
+| Prompt-injection defense | 3 adversarial cases (profile-field injection), zero leakage; the LLM judge also receives sanitized context |
+| Funnel (scripted instrumentation check, 20 sessions) | publish -> match 85% -> first message 76.5% -> both agreed 47.1%; 46.2% of first messages used an AI opener |
+
+Details: [evaluation runs](docs/product_validation/eval_results/),
+[analytics plan and first funnel](docs/product_validation/04_analytics_event_plan.md),
+[model selection and agent-boundary tradeoffs](docs/product_validation/08_model_selection_and_tradeoffs.md).
 
 ## Why Plus One
 

@@ -10,7 +10,7 @@
       <p class="chat-decision-copy">You have five minutes to decide if you both want to meet.</p>
     {% endif %}
     <p>Status: <strong>{{ match.get_status_display }}</strong></p>
-    <p>Chat timer: <strong class="countdown" data-deadline="{{ match.chat_expires_at|date:'c' }}">--</strong></p>
+    <p>Chat timer: <strong class="countdown" data-deadline="{{ match.chat_expires_at|date:'c' }}" data-fallback="chat closed">...</strong></p>
     <div class="agree-state">
       <span>You agreed: {{ viewer_agreed|yesno:"yes,no" }}</span>
       <span>Match agreed: {{ other_agreed|yesno:"yes,no" }}</span>

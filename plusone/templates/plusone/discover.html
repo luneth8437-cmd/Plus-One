@@ -72,8 +72,8 @@
     <article class="activity-card decision-card color-{{ post.activity_type }}{% if post.user_id == user.id %} own-card{% endif %}">
       <div class="card-meta">
         <span>{{ post.get_activity_type_display }}</span>
-        <span>{{ post.spots_remaining }} spot{{ post.spots_remaining|pluralize }} left</span>
-        <span>expires in <span class="countdown" data-deadline="{{ post.expire_time|date:'c' }}">--</span></span>
+        {% if post.is_demo_card %}<span class="demo-chip">Demo</span>{% else %}<span>1-on-1</span>{% endif %}
+        <span>expires in <span class="countdown" data-deadline="{{ post.expire_time|date:'c' }}" data-fallback="soon">--</span></span>
       </div>
       <h2>{{ post.title }}</h2>
       <p>{{ post.description|truncatechars:130 }}</p>

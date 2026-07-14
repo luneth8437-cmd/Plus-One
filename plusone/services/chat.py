@@ -8,6 +8,7 @@ from plusone.ai import moderate_text
 from plusone.models import ChatMessage, Match, ProductEvent
 from plusone.services.analytics import log_event, log_message_events
 from plusone.services.capacity import sync_post_status_for_capacity
+from plusone.services.demo import maybe_demo_reply
 
 
 @dataclass(frozen=True)
@@ -98,4 +99,5 @@ def create_chat_message(match, user, text):
     # Funnel events are derived server-side after the write; only the
     # opener-usage classification is stored, never the message text.
     log_message_events(match, user, text)
+    maybe_demo_reply(match, user)
     return message, moderation

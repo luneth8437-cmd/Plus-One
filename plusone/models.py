@@ -117,6 +117,11 @@ class ActivityPost(models.Model):
     def spots_remaining(self):
         return max(0, 1 - self.held_spots)
 
+    @property
+    def is_demo_card(self):
+        # Demo-mode supply is clearly labeled in the UI (see services/demo.py).
+        return self.user.username.startswith("demo_partner_")
+
 
 class Swipe(models.Model):
     """One user's interest/pass decision for a post."""

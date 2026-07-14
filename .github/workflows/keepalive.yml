@@ -1,0 +1,20 @@
+name: Keep demo instance awake
+
+# Render's free tier spins the instance down after inactivity, which costs
+# the first visitor ~60s of cold start. A scheduled ping keeps the public
+# demo responsive during the day. (GitHub pauses schedules after 60 days of
+# repo inactivity - fine for a portfolio demo.)
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the live demo
+        run: |
+          curl --silent --show-error --max-time 90 --output /dev/null \
+            https://plusone-ub3w.onrender.com/ || echo "Ping failed (instance may be redeploying)."
