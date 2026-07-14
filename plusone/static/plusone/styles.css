@@ -2744,6 +2744,39 @@ code {
   font-size: 18px;
 }
 
+.draft-warnings {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--coral, #e86a6a) 45%, var(--line));
+  border-radius: 10px;
+  background: #fff6f3;
+}
+
+.draft-warnings ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.draft-warnings p {
+  margin: 0;
+}
+
+.inline-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.inline-checkbox input {
+  width: auto;
+  margin: 0;
+}
+
 .time-option-row,
 .quick-replies {
   display: flex;

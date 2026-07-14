@@ -8,6 +8,7 @@ from django.utils import timezone
 from plusone.ai_services.client import chat_completion as default_chat_completion
 from plusone.ai_services.client import llm_client as default_llm_client
 from plusone.ai_services.logging import save_log
+from plusone.ai_services.validation import extract_explicit_date, validate_draft
 from plusone.models import ActivityPost, CampusLocation, LLMLog
 
 
@@ -87,11 +88,14 @@ def _parse_time(text):
     if not _has_explicit_time(text):
         return None
 
-    lowered = text.lower()
     now = timezone.localtime()
     base = now
-    if "tomorrow" in lowered:
-        base = now + timedelta(days=1)
+    # Anchor the clock time to any explicit date in the text (July 16, 16.7.,
+    # tomorrow, Friday, ...). This is the fix for the U6-U10 date-shift bug
+    # where "July 8" was drafted as Jul 7.
+    explicit_date = extract_explicit_date(text, now=now)
+    if explicit_date:
+        base = now.replace(year=explicit_date.year, month=explicit_date.month, day=explicit_date.day)
 
     hour = minute = None
     match = TIME_WITH_MERIDIEM_RE.search(text)
@@ -112,7 +116,9 @@ def _parse_time(text):
         return None
 
     parsed = base.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if parsed < now - timedelta(minutes=15):
+    # Only roll forward a past time when the user did not write an explicit
+    # date; an explicit date must never be silently moved.
+    if explicit_date is None and parsed < now - timedelta(minutes=15):
         parsed += timedelta(days=1)
     return parsed
 
@@ -184,6 +190,23 @@ def _merge_activity_parse(parsed, fallback):
     return merged
 
 
+def _finalize_draft(text, draft):
+    """Run deterministic guardrails on a draft before it reaches the review UI.
+
+    Order matters: validate first (so a date conflict is reported), then align
+    the drafted date to the explicit date in the user's text. The user still
+    reviews and can change everything before publish.
+    """
+    draft["validation"] = validate_draft(text, draft)
+    if draft["validation"]["date_mismatch"]:
+        start_time = _parse_iso_datetime(draft.get("start_time"))
+        expected = timezone.datetime.fromisoformat(draft["validation"]["expected_date"]).date()
+        if start_time:
+            aligned = start_time.replace(year=expected.year, month=expected.month, day=expected.day)
+            draft["start_time"] = aligned.isoformat()
+    return draft
+
+
 def parse_activity_text(user, text, llm_client=default_llm_client, chat_completion=default_chat_completion):
     started_at = time.perf_counter()
     llm = llm_client()
@@ -219,14 +242,14 @@ def parse_activity_text(user, text, llm_client=default_llm_client, chat_completi
             raw = response.choices[0].message.content or "{}"
             parsed = json.loads(raw)
             fallback = rule_parse_activity(text)
-            merged = _merge_activity_parse(parsed, fallback)
+            merged = _finalize_draft(text, _merge_activity_parse(parsed, fallback))
             save_log(user, LLMLog.TaskType.PARSE_POST, text, merged, raw, model, strategy, True, started_at)
             return merged
         except Exception as exc:
-            parsed = rule_parse_activity(text)
+            parsed = _finalize_draft(text, rule_parse_activity(text))
             save_log(user, LLMLog.TaskType.PARSE_POST, text, parsed, str(exc), model, f"{strategy}_failed_rule_fallback", False, started_at)
             return parsed
 
-    parsed = rule_parse_activity(text)
+    parsed = _finalize_draft(text, rule_parse_activity(text))
     save_log(user, LLMLog.TaskType.PARSE_POST, text, parsed, json.dumps(parsed), "", "rule_fallback", True, started_at)
     return parsed

@@ -46,3 +46,15 @@ jobs:
 
       - name: Django test suite
         run: python manage.py test --noinput
+
+      - name: AI benchmark (deterministic pipeline)
+        run: |
+          python manage.py migrate --noinput
+          python manage.py evaluate_ai --report eval-report.md
+          cat eval-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload AI benchmark report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-eval-report
+          path: eval-report.md

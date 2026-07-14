@@ -172,7 +172,9 @@ class PlusOneTestCase(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Draft ready. Review the details before publishing.")
+        # "Tonight" has no explicit clock time, so the guardrail flags the draft
+        # for review instead of showing the plain success message.
+        self.assertContains(response, "Draft ready, but it needs your attention before publishing.")
         self.assertContains(response, "Review and publish")
         self.assertContains(response, "Tell Plus One your plan")
         self.assertContains(response, "Draft my card")

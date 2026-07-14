@@ -16,6 +16,7 @@ from .services.expiration import refresh_expired_records
 from .services.identity import ensure_anonymous_session, ensure_user_profile, reset_anonymous_identity_for_request
 from .services.matching import SwipeOutcome, handle_swipe
 from .services.posts import cancel_activity_post, moderate_activity_form, moderate_activity_text, save_activity_post_for_user
+from .ai_services.validation import check_publish_date
 
 
 def _safe_next_redirect(request, target, fallback):
@@ -81,6 +82,9 @@ def create_post(request):
     post_form = ActivityPostForm()
     parsed = None
     time_options = []
+    draft_check = None
+    date_confirm_message = None
+    raw_text = ""
 
     if request.method == "POST" and request.POST.get("action") == "assist":
         # Assist is a draft-only path: unsafe input is blocked before parsing,
@@ -93,19 +97,33 @@ def create_post(request):
                 messages.error(request, f"Safety check flagged this request: {moderation.get('reason', 'Please revise it.')}")
             else:
                 parsed = parse_activity_text(request.user, raw_text)
+                draft_check = parsed.get("validation")
                 post_form = ActivityPostForm(initial=post_initial_from_ai(parsed))
                 time_options = suggest_ambiguous_time_options(raw_text) if not parsed.get("start_time") else []
-                messages.success(request, "Draft ready. Review the details before publishing.")
+                if draft_check and (draft_check["missing_fields"] or draft_check["warnings"]):
+                    messages.warning(request, "Draft ready, but it needs your attention before publishing.")
+                else:
+                    messages.success(request, "Draft ready. Review the details before publishing.")
 
     if request.method == "POST" and request.POST.get("action") == "publish":
         # Publish uses the reviewed structured form, then moderates the final
         # title/description in case the user edited AI output before submitting.
         post_form = ActivityPostForm(request.POST)
-        assist_form = ActivityAssistForm(initial={"raw_text": request.POST.get("raw_text", "")})
+        raw_text = request.POST.get("raw_text", "")
+        assist_form = ActivityAssistForm(initial={"raw_text": raw_text})
         if post_form.is_valid():
             moderation = moderate_activity_form(request.user, post_form)
+            date_confirmed = request.POST.get("confirm_date") == "yes"
+            date_confirm_message = None if date_confirmed else check_publish_date(
+                raw_text, post_form.cleaned_data.get("start_time")
+            )
             if moderation.get("flagged"):
                 messages.error(request, f"Safety check flagged this post: {moderation.get('reason', 'Please revise it.')}")
+            elif date_confirm_message:
+                # Guardrail: an explicit date in the original text conflicts
+                # with the reviewed start_time. Block once and ask the user to
+                # confirm instead of silently publishing a wrong date.
+                messages.warning(request, "Please confirm the start date before publishing.")
             else:
                 post = save_activity_post_for_user(request.user, post_form)
                 messages.success(request, "Your Plus One card is live.")
@@ -120,6 +138,9 @@ def create_post(request):
             "parsed": parsed,
             "post_preview": post_form_preview(post_form),
             "time_options": time_options,
+            "draft_check": draft_check,
+            "date_confirm_message": date_confirm_message,
+            "raw_text": raw_text,
         },
     )
 

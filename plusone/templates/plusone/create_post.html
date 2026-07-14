@@ -21,6 +21,19 @@
 
   <article class="panel">
     <h2>2. Review and publish</h2>
+    {% if draft_check and draft_check.warnings %}
+      <section class="draft-warnings" aria-label="Draft needs attention">
+        <p class="eyebrow">Check the draft</p>
+        <ul>
+          {% for warning in draft_check.warnings %}
+            <li data-draft-warning="{{ warning.code }}">{{ warning.message }}</li>
+          {% endfor %}
+          {% for correction in draft_check.corrections %}
+            <li data-draft-warning="corrected_{{ correction.field }}">{{ correction.message }}</li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
     {% if time_options %}
       <section class="time-clarifier" aria-label="Confirm start time">
         <p class="eyebrow">Time needs confirmation</p>
@@ -36,7 +49,17 @@
     {% endif %}
     <form method="post" class="stacked-form">
       {% csrf_token %}
+      <input type="hidden" name="raw_text" value="{{ raw_text }}">
       {{ post_form.as_p }}
+      {% if date_confirm_message %}
+        <section class="draft-warnings" aria-label="Confirm start date">
+          <p data-draft-warning="publish_date_mismatch">{{ date_confirm_message }}</p>
+          <label class="inline-checkbox">
+            <input type="checkbox" name="confirm_date" value="yes">
+            Yes, this date is correct.
+          </label>
+        </section>
+      {% endif %}
       <button class="primary-action coral" name="action" value="publish">Publish temporary card</button>
     </form>
   </article>
