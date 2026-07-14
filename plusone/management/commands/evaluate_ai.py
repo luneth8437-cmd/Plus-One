@@ -13,6 +13,7 @@ against the previous run.
 """
 
 import json
+import time
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
@@ -64,10 +65,14 @@ def evaluate_parsing(parse_fn):
         if not ok:
             results[-1]["failures"].append({"field": field, "detail": detail})
 
+    latencies = []
     for case in PARSING_CASES:
+        started = time.perf_counter()
         draft = parse_fn(case["text"])
+        latencies.append(time.perf_counter() - started)
         validation = draft.get("validation") or {}
-        results.append({"id": case["id"], "tags": case.get("tags", []), "failures": []})
+        results.append({"id": case["id"], "tags": case.get("tags", []), "failures": [],
+                        "latency_ms": round(latencies[-1] * 1000)})
         expected = case["expected"]
 
         if "activity_type" in expected:
@@ -109,8 +114,15 @@ def evaluate_parsing(parse_fn):
         for field in sorted(field_totals)
     }
     failed_cases = [r for r in results if r["failures"]]
+    ordered = sorted(latencies)
+    latency = {
+        "avg_ms": round(1000 * sum(ordered) / len(ordered)),
+        "p50_ms": round(1000 * ordered[len(ordered) // 2]),
+        "p95_ms": round(1000 * ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))]),
+        "max_ms": round(1000 * ordered[-1]),
+    } if ordered else None
     return {"cases": results, "fields": summary, "failed_case_count": len(failed_cases),
-            "case_count": len(results)}
+            "case_count": len(results), "latency": latency}
 
 
 def evaluate_moderation(moderate_fn):
@@ -142,6 +154,13 @@ def render_markdown(parsing, moderation, strategy):
         f"- Date: {now.strftime('%Y-%m-%d %H:%M %Z')}",
         f"- Pipeline: {strategy}",
         f"- Parsing cases: {parsing['case_count']} ({parsing['failed_case_count']} with failures)",
+    ]
+    lat = parsing.get("latency")
+    if lat:
+        lines.append(
+            f"- Parsing latency: avg {lat['avg_ms']}ms, p50 {lat['p50_ms']}ms, "
+            f"p95 {lat['p95_ms']}ms, max {lat['max_ms']}ms")
+    lines += [
         "",
         "## Parsing field accuracy",
         "",
@@ -227,6 +246,11 @@ class Command(BaseCommand):
                 self.stdout.write(f"{field:24s} {stats['correct']}/{stats['total']} ({pct:.0f}%)")
             self.stdout.write(
                 f"cases with failures: {parsing['failed_case_count']}/{parsing['case_count']}")
+            lat = parsing.get("latency")
+            if lat:
+                self.stdout.write(
+                    f"latency: avg {lat['avg_ms']}ms | p50 {lat['p50_ms']}ms | "
+                    f"p95 {lat['p95_ms']}ms | max {lat['max_ms']}ms")
             for case in parsing["cases"]:
                 for failure in case["failures"]:
                     self.stdout.write(self.style.WARNING(
