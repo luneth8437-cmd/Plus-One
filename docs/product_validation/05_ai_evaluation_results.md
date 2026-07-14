@@ -2,9 +2,9 @@
 
 Goal: evaluate whether AI-assisted parsing and safety moderation are useful enough for the MVP, and decide where deterministic guardrails must stay in the product.
 
-Current evidence source: `03_usability_test_report.md`, based on a 10-session usability test of the create-match-chat-agree-handoff-dashboard flow.
+Current evidence sources: `03_usability_test_report.md` (10-session usability test of the create-match-chat-agree-handoff-dashboard flow) and the automated benchmark in `plusone/ai_services/eval_cases.py`, run via `python manage.py evaluate_ai` (first measured baseline: 2026-07-14, report in `eval_results/2026-07-14-fallback.md`).
 
-Important boundary: this document reports usability-observed AI risks. It does not claim a full benchmark of all parsing or moderation behavior yet.
+Important boundary: the measured baseline below covers the deterministic fallback pipeline with guardrails. An LLM-mode run (`--use-llm`) with latency and fallback-rate measurement is still pending.
 
 ## Current Evidence From Usability Testing
 
@@ -16,18 +16,34 @@ Important boundary: this document reports usability-observed AI risks. It does n
 | User trust in filled fields | U6 said: "This one filled the time, so I trust the draft more." | U6 in usability report | Filled fields create confidence even when they are wrong, so silent AI errors are more dangerous than blank fields. |
 | Safety confusion | 0 critical safety confusion cases; 5/10 had mild concern about anonymous meetups. | Success metrics in usability report | UI safety guidance was understandable, but this does not replace a dedicated moderation benchmark. |
 
+## Measured Benchmark Results (2026-07-14, deterministic fallback + guardrails)
+
+19 parsing regression cases (including the U1-U10 failure types) and 12 moderation cases (6 risky, 6 benign controls), run with `python manage.py evaluate_ai --report`. CI (`ci.yml`) reruns this benchmark on every push and uploads the report as the `ai-eval-report` artifact (run #18, commit `74bca7a`, green).
+
+| Field / check | Result |
+| --- | --- |
+| activity_type | 18/19 (95%) |
+| date | 11/11 (100%) — includes the former U6-U10 "July 8 → Jul 7" shift cases |
+| time | 11/11 (100%) |
+| location | 16/16 (100%) |
+| expire_in_bounds | 1/1 (100%) — former U3 1440-minute case now clamped |
+| no_invented_time | 5/5 (100%) — vague inputs no longer get a hallucinated time |
+| warning_missing_start_time | 5/5 (100%) — former U1-U5 cases now surface an explicit warning |
+| Cases fully passing | 18/19 (only miss: `u5_sometime_tomorrow` classified as FOOD instead of the expected type — low severity, user-correctable in review) |
+| Moderation confusion matrix | TP 6, FP 0, TN 6, FN 0 — precision 1.00, recall 1.00 on this sample |
+
 ## Result Summary
 
 | Metric | Current result |
 | --- | --- |
 | Create flow completion | 9/10 completed the flow, but several completions required manual correction. |
-| Draft field reliability | Not acceptable for auto-publish. Missing start time and date shift appeared repeatedly. |
-| Time/date handling acceptable rate | Not acceptable based on usability evidence: 10/10 relevant draft sessions exposed either missing start time or wrong date. |
-| Expiry handling | Needs guardrails: one observed 1440-minute generated expiry blocked the user. |
+| Draft field reliability | Not acceptable for auto-publish; guardrails now convert the observed failure modes into explicit warnings and publish blockers (see measured baseline above). |
+| Time/date handling | Deterministic pipeline: 11/11 date and 11/11 time on the regression set, including all previously failing usability cases. |
+| Expiry handling | Clamped to product bounds; 1/1 on the regression case. |
 | Safety UX confusion | 0 critical cases in usability testing. |
-| Dedicated moderation recall | Not yet measured in a real benchmark after the usability report. |
-| Fallback behavior | Not evaluated in the current usability report. |
-| Latency | Not measured in the current usability report. |
+| Dedicated moderation recall | 1.00 recall / 1.00 precision on a 12-case benchmark (small sample; expand before stronger claims). |
+| Fallback behavior | Deterministic fallback benchmarked directly (it is the system under test above). LLM-mode comparison pending. |
+| Latency | Not yet measured; planned as part of the `--use-llm` run. |
 
 ## Error Taxonomy From Current Evidence
 
@@ -59,15 +75,14 @@ Important boundary: this document reports usability-observed AI risks. It does n
 6. Keep deterministic fallback and validation even when the LLM call succeeds.
 7. Keep manual review before publish as a core product rule.
 
-## Dedicated AI Benchmark Still Needed
+## Benchmark Status and Next Steps
 
-The next evaluation should use real model or fallback outputs captured from actual runs. It should include:
-
-| Benchmark area | Minimum sample | What to record |
-| --- | --- | --- |
-| Natural-language card parsing | 15 realistic student inputs across lunch, study, sports, coffee, language practice, and campus events. | Input, expected fields, actual output, missing fields, wrong fields, date/time handling, fallback use, latency, verdict. |
-| Safety moderation | 5-10 post/chat samples including risky and benign controls. | Surface, input, expected allow/block, actual allow/block, category, false positive/false negative, fallback use, latency. |
-| Usability-linked regression cases | At least the U1-U10 failure types. | Missing start time, July 8 to Jul 7 shift, invalid expiry, publish blocker clarity. |
+| Benchmark area | Status |
+| --- | --- |
+| Natural-language card parsing | Done (deterministic mode): 19 cases across sports, food, study, coffee, and vague inputs. Next: same set with `--use-llm` to compare LLM vs fallback accuracy and record latency. |
+| Safety moderation | Done (deterministic mode): 12 cases, risky + benign controls, full confusion matrix. Next: expand sample and rerun in LLM mode. |
+| Usability-linked regression cases | Done: U1-U5 missing-time, U6-U10 date-shift, and U3 expiry cases are all encoded in `eval_cases.py` and pass. |
+| Prompt versioning | Ongoing: every prompt change should rerun `evaluate_ai --report` and commit the report to `eval_results/` so accuracy deltas are traceable per version. |
 
 ## Interview and Usability Connection
 
