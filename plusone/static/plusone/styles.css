@@ -2791,6 +2791,51 @@ code {
   margin-top: 12px;
 }
 
+.opener-assist-form {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.opener-assist-button {
+  min-height: 0;
+  padding: 9px 12px;
+}
+
+.opener-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.opener-suggestion {
+  background: var(--panel, #fff);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.opener-suggestion:hover {
+  border-color: rgba(0, 0, 0, 0.3);
+}
+
+.opener-suggestion .opener-text {
+  font-weight: 700;
+}
+
+.opener-suggestion .opener-reason {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .chat-safety-copy {
   color: var(--muted);
   font-size: 13px;

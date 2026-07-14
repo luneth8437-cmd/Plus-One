@@ -19,8 +19,9 @@ from datetime import timedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from plusone.ai_services.eval_cases import MODERATION_CASES, PARSING_CASES
+from plusone.ai_services.eval_cases import MODERATION_CASES, OPENING_CASES, PARSING_CASES
 from plusone.ai_services.moderation import rule_moderate_text
+from plusone.ai_services.opening_assistant import MAX_OPENER_LENGTH, rule_generate_openers
 from plusone.ai_services.parsing import _finalize_draft, rule_parse_activity
 from plusone.models import CampusLocation
 
@@ -146,7 +147,36 @@ def evaluate_moderation(moderate_fn):
             "precision": precision, "recall": recall, "failures": failures}
 
 
-def render_markdown(parsing, moderation, strategy):
+def evaluate_openers(generate_fn):
+    """Score an opener generator (context dict -> list of openers)."""
+    results = []
+    for case in OPENING_CASES:
+        openers = generate_fn(case["context"]) or []
+        failures = []
+        if not (2 <= len(openers) <= 3):
+            failures.append(f"count {len(openers)}, want 2-3")
+        joined = " ".join(o.get("text", "") for o in openers)
+        for needle in case.get("expect_mentions", []):
+            if needle.lower() not in joined.lower():
+                failures.append(f"missing mention: {needle}")
+        if case.get("shared_expected"):
+            shared = case["context"]["shared_interests"]
+            if not any(s in joined.lower() for s in shared):
+                failures.append("shared interest unused")
+        for opener in openers:
+            text = opener.get("text", "")
+            if len(text) > MAX_OPENER_LENGTH:
+                failures.append(f"too long: {text[:40]}...")
+            if rule_moderate_text(text).get("flagged"):
+                failures.append(f"flagged output: {text[:40]}...")
+            if not opener.get("reason"):
+                failures.append("missing reason")
+        results.append({"id": case["id"], "failures": failures})
+    failed = [r for r in results if r["failures"]]
+    return {"cases": results, "failed_case_count": len(failed), "case_count": len(results)}
+
+
+def render_markdown(parsing, moderation, strategy, openers=None):
     now = timezone.localtime()
     lines = [
         "# AI Evaluation Run",
@@ -196,6 +226,16 @@ def render_markdown(parsing, moderation, strategy):
         lines.append("")
         for failure in m["failures"]:
             lines.append(f"- {failure['error']}: \"{failure['text']}\"")
+    if openers:
+        lines += [
+            "",
+            "## Opening assistant (deterministic path)",
+            "",
+            f"- Cases: {openers['case_count']} ({openers['failed_case_count']} with failures)",
+        ]
+        for case in openers["cases"]:
+            status = "ok" if not case["failures"] else "; ".join(case["failures"])
+            lines.append(f"- `{case['id']}`: {status}")
     return "\n".join(lines) + "\n"
 
 
@@ -233,10 +273,12 @@ class Command(BaseCommand):
 
         parsing = evaluate_parsing(parse_fn)
         moderation = evaluate_moderation(rule_moderate_text)
+        openers = evaluate_openers(rule_generate_openers)
 
         if options["json"]:
             self.stdout.write(json.dumps(
-                {"strategy": strategy, "parsing": parsing, "moderation": moderation},
+                {"strategy": strategy, "parsing": parsing, "moderation": moderation,
+                 "openers": openers},
                 indent=2, default=str))
         else:
             self.stdout.write(f"Plus One AI evaluation ({strategy})")
@@ -263,9 +305,16 @@ class Command(BaseCommand):
             for failure in m["failures"]:
                 self.stdout.write(self.style.WARNING(
                     f"  FAIL {failure['error']}: {failure['text']}"))
+            self.stdout.write("-" * 48)
+            self.stdout.write(
+                f"opening assistant: {openers['case_count'] - openers['failed_case_count']}"
+                f"/{openers['case_count']} cases pass")
+            for case in openers["cases"]:
+                for failure in case["failures"]:
+                    self.stdout.write(self.style.WARNING(f"  FAIL {case['id']}: {failure}"))
 
         if options["report"]:
-            report = render_markdown(parsing, moderation, strategy)
+            report = render_markdown(parsing, moderation, strategy, openers)
             with open(options["report"], "w", encoding="utf-8") as handle:
                 handle.write(report)
             self.stdout.write(self.style.SUCCESS(f"Report written to {options['report']}"))

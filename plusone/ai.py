@@ -4,6 +4,8 @@ from .ai_services.client import llm_client as _default_llm_client
 from .ai_services.icebreaker import generate_icebreaker as _generate_icebreaker
 from .ai_services.icebreaker import rule_generate_icebreaker
 from .ai_services.moderation import UNSAFE_KEYWORDS, moderate_text as _moderate_text
+from .ai_services.opening_assistant import generate_openers as _generate_openers
+from .ai_services.opening_assistant import gather_context, rule_generate_openers, validate_openers
 from .ai_services.moderation import rule_moderate_text
 from .ai_services.parsing import parse_activity_text as _parse_activity_text
 from .ai_services.parsing import rule_parse_activity
@@ -28,3 +30,7 @@ def generate_icebreaker(user, post):
 
 def moderate_text(user, text):
     return _moderate_text(user, text, llm_client=_llm_client, chat_completion=_chat_completion)
+
+
+def generate_openers(user, match):
+    return _generate_openers(user, match, llm_client=_llm_client, chat_completion=_chat_completion)

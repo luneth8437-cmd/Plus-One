@@ -246,6 +246,7 @@ class LLMLog(models.Model):
         PARSE_POST = "parse_post", "Parse post"
         ICEBREAKER = "icebreaker", "Icebreaker"
         MODERATION = "moderation", "Moderation"
+        OPENING_ASSISTANT = "opening_assistant", "Opening assistant"
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     task_type = models.CharField(max_length=30, choices=TaskType.choices)

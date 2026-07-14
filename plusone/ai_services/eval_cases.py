@@ -231,3 +231,52 @@ MODERATION_CASES = [
     ("Meet at the student center info desk, public spot.", False),
     ("Coffee at the north dining hall, my treat.", False),
 ]
+
+
+# Opening-assistant cases: pre-assembled contexts (same shape gather_context
+# produces), so the generation + validation steps are benchmarkable without a
+# database or network. `expect_mentions` items must appear in at least one
+# opener; `shared_expected` asserts the shared interest is actually used.
+OPENING_CASES = [
+    {
+        "id": "sports_shared_interest",
+        "context": {
+            "post": {"title": "Basketball game tonight", "activity_type": "sports",
+                     "location": "Campus Sports Hall", "start_time": ""},
+            "viewer_role": "swiper",
+            "viewer": {"major": "Design", "year": "Y2", "campus_area": "North",
+                       "interests": "coffee, hiking, basketball"},
+            "partner": {"major": "CS", "year": "Y3", "campus_area": "Central",
+                        "interests": "basketball, board games, coffee"},
+            "shared_interests": ["basketball", "coffee"],
+        },
+        "expect_mentions": ["Campus Sports Hall"],
+        "shared_expected": True,
+    },
+    {
+        "id": "food_no_shared_interests",
+        "context": {
+            "post": {"title": "Lunch at north dining hall", "activity_type": "food",
+                     "location": "North Dining Hall", "start_time": ""},
+            "viewer_role": "poster",
+            "viewer": {"major": "Physics", "year": "Y1", "campus_area": "North", "interests": "chess"},
+            "partner": {"major": "History", "year": "Y4", "campus_area": "South", "interests": "hiking"},
+            "shared_interests": [],
+        },
+        "expect_mentions": ["North Dining Hall"],
+        "shared_expected": False,
+    },
+    {
+        "id": "study_empty_profiles",
+        "context": {
+            "post": {"title": "Study session at the library", "activity_type": "study",
+                     "location": "Main Library", "start_time": ""},
+            "viewer_role": "swiper",
+            "viewer": {"major": "", "year": "", "campus_area": "", "interests": ""},
+            "partner": {"major": "", "year": "", "campus_area": "", "interests": ""},
+            "shared_interests": [],
+        },
+        "expect_mentions": ["Main Library"],
+        "shared_expected": False,
+    },
+]

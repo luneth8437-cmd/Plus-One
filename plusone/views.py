@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from .ai import parse_activity_text, suggest_ambiguous_time_options
+from .ai import generate_openers, parse_activity_text, suggest_ambiguous_time_options
 from .forms import ActivityAssistForm, ActivityPostForm, ChatMessageForm
 from .models import ActivityPost, Match, Swipe
 from .presenters import chat_message_payload, post_edit_initial, post_form_preview, post_initial_from_ai
@@ -283,6 +283,15 @@ def chat(request, match_id):
             messages.info(request, "This chat is already closed.")
         return redirect("chat", match_id=match.id)
 
+    opener_suggestions = []
+    if request.method == "POST" and request.POST.get("action") == "suggest_openers":
+        # Agent-assisted openers: AI drafts, the user picks and sends.
+        # Suggestions are never auto-sent (same rule as post publishing).
+        if match.status == Match.Status.CHATTING:
+            opener_suggestions = generate_openers(request.user, match)
+        else:
+            messages.error(request, "This chat is no longer active.")
+
     viewer_agreed = match.poster_agreed if request.user.id == match.poster_id else match.swiper_agreed
     other_agreed = match.swiper_agreed if request.user.id == match.poster_id else match.poster_agreed
     messages_list = list(match.messages.select_related("sender").order_by("id"))
@@ -296,6 +305,7 @@ def chat(request, match_id):
             "form": form,
             "viewer_agreed": viewer_agreed,
             "other_agreed": other_agreed,
+            "opener_suggestions": opener_suggestions,
         },
     )
 
