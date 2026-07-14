@@ -4,7 +4,7 @@ Goal: evaluate whether AI-assisted parsing and safety moderation are useful enou
 
 Current evidence sources: `03_usability_test_report.md` (10-session usability test of the create-match-chat-agree-handoff-dashboard flow) and the automated benchmark in `plusone/ai_services/eval_cases.py`, run via `python manage.py evaluate_ai` (first measured baseline: 2026-07-14, report in `eval_results/2026-07-14-fallback.md`).
 
-Important boundary: the measured baseline below covers the deterministic fallback pipeline with guardrails. An LLM-mode run (`--use-llm`) with latency and fallback-rate measurement is still pending.
+Both pipelines are now benchmarked (2026-07-14): the deterministic fallback (`eval_results/2026-07-14-fallback.md`) and the full LLM pipeline with guardrails (`eval_results/2026-07-14-llm.md`, deepseek-v4-flash).
 
 ## Current Evidence From Usability Testing
 
@@ -30,7 +30,21 @@ Important boundary: the measured baseline below covers the deterministic fallbac
 | no_invented_time | 5/5 (100%) — vague inputs no longer get a hallucinated time |
 | warning_missing_start_time | 5/5 (100%) — former U1-U5 cases now surface an explicit warning |
 | Cases fully passing | 18/19 (only miss: `u5_sometime_tomorrow` classified as FOOD instead of the expected type — low severity, user-correctable in review) |
-| Moderation confusion matrix | TP 6, FP 0, TN 6, FN 0 — precision 1.00, recall 1.00 on this sample |
+| Moderation confusion matrix | TP 6, FP 0, TN 6, FN 0 — precision 1.00, recall 1.00 on this sample (rule layer) |
+
+## LLM vs Fallback Comparison (2026-07-14, deepseek-v4-flash)
+
+Same 19-case regression set, full LLM pipeline with guardrails (`--use-llm`):
+
+| Metric | Deterministic fallback | LLM pipeline |
+| --- | --- | --- |
+| Cases fully passing | 18/19 | 18/19 |
+| date / time | 11/11 / 11/11 | 11/11 / 11/11 |
+| activity_type | 18/19 (miss: `u5_sometime_tomorrow` → FOOD) | 18/19 (miss: `language_practice_other` → study) |
+| All guardrail checks (expiry clamp, no invented time, missing-time warning) | 100% | 100% |
+| Latency | avg 0ms, p95 1ms | avg 1556ms, p50 1474ms, p95 2850ms |
+
+Product reading: on this regression set the LLM adds ~1.5s median latency without an accuracy gain, because the guardrail layer already normalizes both pipelines' output. The two pipelines fail different edge cases (vague-input classification vs. borderline category), both low-severity and user-correctable in the review step. This supports keeping the deterministic pipeline as a first-class fallback rather than a degraded mode, and justifies the assist-not-auto-publish design: neither pipeline is reliable enough to skip human review, and both are reliable enough to draft.
 
 ## Result Summary
 
@@ -42,8 +56,8 @@ Important boundary: the measured baseline below covers the deterministic fallbac
 | Expiry handling | Clamped to product bounds; 1/1 on the regression case. |
 | Safety UX confusion | 0 critical cases in usability testing. |
 | Dedicated moderation recall | 1.00 recall / 1.00 precision on a 12-case benchmark (small sample; expand before stronger claims). |
-| Fallback behavior | Deterministic fallback benchmarked directly (it is the system under test above). LLM-mode comparison pending. |
-| Latency | Not yet measured; planned as part of the `--use-llm` run. |
+| Fallback behavior | Benchmarked head-to-head with the LLM pipeline: accuracy parity on the regression set (see comparison above). |
+| Latency | Measured: fallback ~0ms; LLM avg 1556ms, p95 2850ms per parse call. |
 
 ## Error Taxonomy From Current Evidence
 
@@ -79,8 +93,8 @@ Important boundary: the measured baseline below covers the deterministic fallbac
 
 | Benchmark area | Status |
 | --- | --- |
-| Natural-language card parsing | Done (deterministic mode): 19 cases across sports, food, study, coffee, and vague inputs. Next: same set with `--use-llm` to compare LLM vs fallback accuracy and record latency. |
-| Safety moderation | Done (deterministic mode): 12 cases, risky + benign controls, full confusion matrix. Next: expand sample and rerun in LLM mode. |
+| Natural-language card parsing | Done in both modes: 19 cases, LLM vs fallback compared with latency (see comparison section). Next: grow the case set as new failure types appear in production logs. |
+| Safety moderation | Done (rule layer): 12 cases, risky + benign controls, full confusion matrix. Next: expand sample and benchmark the LLM moderation path separately. |
 | Usability-linked regression cases | Done: U1-U5 missing-time, U6-U10 date-shift, and U3 expiry cases are all encoded in `eval_cases.py` and pass. |
 | Prompt versioning | Ongoing: every prompt change should rerun `evaluate_ai --report` and commit the report to `eval_results/` so accuracy deltas are traceable per version. |
 
