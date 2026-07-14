@@ -189,12 +189,18 @@ def judge_openers(cases_openers, client, llm_config, chat_completion):
     ``cases_openers`` is a list of (case, openers). One judge call per case
     keeps cost low (~10 calls) while still exposing weak outputs.
     """
+    from plusone.ai_services.opening_assistant import sanitize_context
+
     scores = []
     for case, openers in cases_openers:
         if not openers:
             continue
         payload = {
-            "context": case["context"],
+            # The judge gets the same sanitized context the generator saw.
+            # First run proved the judge itself is injectable: raw adversarial
+            # context made it quote the injected text as "worst opener" and
+            # score safety 1 even though the openers were clean.
+            "context": sanitize_context(case["context"]),
             "openers": [o["text"] for o in openers],
         }
         try:
