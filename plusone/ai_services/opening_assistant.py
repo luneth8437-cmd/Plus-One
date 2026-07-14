@@ -193,6 +193,18 @@ def rule_generate_openers(context):
             f"Hey! Quiet-focus session or okay to chat a little while we work at {location}?",
             "Clarifies study style upfront so the meetup matches expectations.",
         ),
+        ActivityPost.ActivityType.CLUB: (
+            f"Hey! Any booth you want to hit first at {location}, or just wander?",
+            "Gives an easy concrete choice that fits a club-fair plan.",
+        ),
+        ActivityPost.ActivityType.EXPLORE: (
+            f"Hi! Fast walk or slow wander around {location}? I'm good either way.",
+            "Sets the pace expectation for an open-ended explore plan.",
+        ),
+        ActivityPost.ActivityType.OTHER: (
+            f"Hey! Anything I should bring or prep before we meet at {location}?",
+            "Practical question that works for any activity type.",
+        ),
     }
     line = type_lines.get(post["activity_type"])
     if line:

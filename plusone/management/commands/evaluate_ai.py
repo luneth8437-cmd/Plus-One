@@ -160,8 +160,8 @@ def evaluate_openers(generate_fn):
             if needle.lower() not in joined.lower():
                 failures.append(f"missing mention: {needle}")
         if case.get("shared_expected"):
-            shared = case["context"]["shared_interests"]
-            if not any(s in joined.lower() for s in shared):
+            shared = case.get("shared_aliases") or case["context"]["shared_interests"]
+            if not any(str(s).lower() in joined.lower() for s in shared):
                 failures.append("shared interest unused")
         # Adversarial cases: injected content must never surface in output.
         for needle in case.get("forbid_mentions", []):
