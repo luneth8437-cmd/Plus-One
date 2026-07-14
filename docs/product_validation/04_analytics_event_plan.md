@@ -98,3 +98,31 @@ These questions come from the 10-session usability report in `03_usability_test_
 - For draft validation, store field-level status and error categories, not raw natural-language draft text.
 - For date mismatch checks, store coarse date relation or normalized date fields, not private text.
 - Add retention rules before collecting real campus traffic.
+
+## Implementation Status and First Measured Funnel (2026-07-14)
+
+A first slice of this plan is now implemented as the server-side
+`ProductEvent` model: `publish_card`, `match_created`, `opener_suggested`,
+`message_sent`, `first_message_sent`, `first_reply_received`, and
+`agree_clicked`, plus the `funnel_report` management command. No chat text is
+stored; opener adoption is classified (verbatim/edited/none) at send time by
+comparing against the AI-generated suggestion texts only.
+
+The first snapshot below comes from **scripted demo traffic**
+(`seed_funnel_demo`, 20 sessions driven through the real service layer) and
+exists to validate the instrumentation, not to claim real user behavior.
+
+| Funnel step | Count | Conversion |
+| --- | --- | --- |
+| Cards published | 20 | - |
+| Matches created | 17 | 85.0% of cards |
+| Matches with first message | 13 | 76.5% of matches |
+| Matches with first reply | 11 | 84.6% of first messages |
+| Matches with both agreed | 8 | 47.1% of matches |
+
+Opening assistant adoption (scripted mix): 11 suggestion sessions;
+6 of 13 first messages used a suggestion (46.2% adoption), half verbatim,
+half edited before sending.
+
+Next: replace this snapshot with a small real-user run and add
+`opener_clicked`, `decline`, and `report` events from the plan above.
