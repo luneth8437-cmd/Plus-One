@@ -7,7 +7,8 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from plusone.ai import generate_icebreaker
-from plusone.models import ActivityPost, ChatMessage, Match, Swipe
+from plusone.models import ActivityPost, ChatMessage, Match, ProductEvent, Swipe
+from plusone.services.analytics import log_event
 from plusone.services.capacity import effective_capacity, holding_match_count
 
 SQLITE_LOCK_RETRY_DELAYS = (0.05, 0.15)
@@ -56,6 +57,13 @@ def handle_swipe(user, post_id, action):
     # does not hold a database row lock.
     icebreaker = generate_icebreaker(user, created_match.post)
     ChatMessage.objects.create(match=created_match, sender=None, message=icebreaker, is_system=True)
+    log_event(
+        ProductEvent.Name.MATCH_CREATED,
+        user=user,
+        post=created_match.post,
+        match=created_match,
+        properties={"activity_type": created_match.post.activity_type},
+    )
     return result
 
 

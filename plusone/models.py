@@ -264,3 +264,38 @@ class LLMLog(models.Model):
 
     def __str__(self):
         return f"{self.task_type} via {self.strategy}"
+
+
+class ProductEvent(models.Model):
+    """Server-side product analytics events (docs/product_validation/04).
+
+    Privacy rules (see the analytics event plan): no chat text, no names, no
+    contact details. ``properties`` may contain AI-generated suggestion texts
+    (needed to measure opener adoption) but never user-written messages.
+    """
+
+    class Name(models.TextChoices):
+        PUBLISH_CARD = "publish_card", "Card published"
+        MATCH_CREATED = "match_created", "Match created"
+        OPENER_SUGGESTED = "opener_suggested", "Openers suggested"
+        FIRST_MESSAGE_SENT = "first_message_sent", "First message sent"
+        MESSAGE_SENT = "message_sent", "Message sent"
+        FIRST_REPLY_RECEIVED = "first_reply_received", "First reply received"
+        AGREE_CLICKED = "agree_clicked", "Agree clicked"
+
+    name = models.CharField(max_length=40, choices=Name.choices)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    post = models.ForeignKey("ActivityPost", on_delete=models.SET_NULL, null=True, blank=True)
+    match = models.ForeignKey("Match", on_delete=models.SET_NULL, null=True, blank=True)
+    properties = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["name", "created_at"], name="event_name_created_idx"),
+            models.Index(fields=["match", "name"], name="event_match_name_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} @ {self.created_at:%Y-%m-%d %H:%M}"

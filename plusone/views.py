@@ -8,7 +8,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from .ai import generate_openers, parse_activity_text, suggest_ambiguous_time_options
 from .forms import ActivityAssistForm, ActivityPostForm, ChatMessageForm
-from .models import ActivityPost, Match, Swipe
+from .models import ActivityPost, Match, ProductEvent, Swipe
+from .services.analytics import log_event
 from .presenters import chat_message_payload, post_edit_initial, post_form_preview, post_initial_from_ai
 from .selectors import dashboard_context_for_user, discover_context_for_user
 from .services.chat import close_match, create_chat_message, record_agreement
@@ -289,6 +290,16 @@ def chat(request, match_id):
         # Suggestions are never auto-sent (same rule as post publishing).
         if match.status == Match.Status.CHATTING:
             opener_suggestions = generate_openers(request.user, match)
+            log_event(
+                ProductEvent.Name.OPENER_SUGGESTED,
+                user=request.user,
+                match=match,
+                properties={
+                    "count": len(opener_suggestions),
+                    # AI-generated texts only; needed to attribute adoption.
+                    "texts": [opener["text"] for opener in opener_suggestions],
+                },
+            )
         else:
             messages.error(request, "This chat is no longer active.")
 

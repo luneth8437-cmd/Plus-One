@@ -1,5 +1,6 @@
 from plusone.ai import moderate_text
-from plusone.models import ActivityPost
+from plusone.models import ActivityPost, ProductEvent
+from plusone.services.analytics import log_event
 
 
 def moderate_activity_form(user, form):
@@ -11,7 +12,17 @@ def moderate_activity_text(user, text):
 
 
 def save_activity_post_for_user(user, form):
-    return form.save_for_user(user)
+    post = form.save_for_user(user)
+    log_event(
+        ProductEvent.Name.PUBLISH_CARD,
+        user=user,
+        post=post,
+        properties={
+            "activity_type": post.activity_type,
+            "expire_minutes": form.cleaned_data.get("expire_minutes"),
+        },
+    )
+    return post
 
 
 def cancel_activity_post(post):

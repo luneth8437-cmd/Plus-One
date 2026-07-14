@@ -5,7 +5,8 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from plusone.ai import moderate_text
-from plusone.models import ChatMessage, Match
+from plusone.models import ChatMessage, Match, ProductEvent
+from plusone.services.analytics import log_event, log_message_events
 from plusone.services.capacity import sync_post_status_for_capacity
 
 
@@ -37,6 +38,12 @@ def record_agreement(match_id, user):
             return AgreementResult(False, match.id)
 
         match.mark_agreed(user)
+        log_event(
+            ProductEvent.Name.AGREE_CLICKED,
+            user=user,
+            match=match,
+            properties={"both_agreed": match.poster_agreed and match.swiper_agreed},
+        )
         return AgreementResult(True, match.id)
 
 
@@ -88,4 +95,7 @@ def create_chat_message(match, user, text):
         message=text,
         is_flagged=False,
     )
+    # Funnel events are derived server-side after the write; only the
+    # opener-usage classification is stored, never the message text.
+    log_message_events(match, user, text)
     return message, moderation
