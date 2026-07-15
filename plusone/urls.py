@@ -19,4 +19,5 @@ urlpatterns = [
     path("matches/", views.dashboard, name="matches_dashboard"),
     path("chat/<int:match_id>/", views.chat, name="chat"),
     path("chat/<int:match_id>/messages/", views.chat_messages, name="chat_messages"),
+    path("chat/<int:match_id>/opener-click/", views.opener_click, name="opener_click"),
 ]

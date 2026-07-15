@@ -52,6 +52,7 @@ def build_report(days=None):
     both_agreed = agreed_qs.count()
 
     opener_sessions = _count(ProductEvent.Name.OPENER_SUGGESTED, since)
+    opener_clicks = _count(ProductEvent.Name.OPENER_CLICKED, since)
     first_msg_qs = ProductEvent.objects.filter(name=ProductEvent.Name.FIRST_MESSAGE_SENT)
     if since:
         first_msg_qs = first_msg_qs.filter(created_at__gte=since)
@@ -80,6 +81,8 @@ def build_report(days=None):
         },
         "opening_assistant": {
             "suggestion_sessions": opener_sessions,
+            "suggestion_clicks": opener_clicks,
+            "click_through_pct": rate(opener_clicks, opener_sessions),
             "first_messages_total": len(first_msg_events),
             "first_messages_using_suggestion": used,
             "adoption_pct": rate(used, len(first_msg_events)),

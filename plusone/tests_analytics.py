@@ -126,3 +126,50 @@ class ProductEventTests(TestCase):
         create_chat_message(match, self.swiper, secret)
         for event in ProductEvent.objects.all():
             self.assertNotIn("xyzzy", repr(event.properties))
+
+
+class OpenerClickEventTests(TestCase):
+    def setUp(self):
+        self.llm_env = patch.dict(os.environ, {"DEEPSEEK_API_KEY": "", "OPENAI_API_KEY": ""})
+        self.llm_env.start()
+        self.addCleanup(self.llm_env.stop)
+        User = get_user_model()
+        self.poster = User.objects.create_user("clk_poster", password="x")
+        self.swiper = User.objects.create_user("clk_swiper", password="x")
+        location, _ = CampusLocation.objects.update_or_create(
+            name="Campus Sports Hall",
+            defaults={
+                "location_type": CampusLocation.LocationType.SPORTS,
+                "area": "Central Campus",
+            },
+        )
+        post = ActivityPost.objects.create(
+            user=self.poster, title="Game", description="x",
+            activity_type=ActivityPost.ActivityType.SPORTS, location=location,
+            start_time=timezone.now() + timedelta(hours=3),
+            expire_time=timezone.now() + timedelta(hours=1),
+        )
+        self.match = Match.objects.get_or_create(
+            post=post, swiper=self.swiper,
+            defaults={"poster": self.poster,
+                      "chat_expires_at": timezone.now() + timedelta(minutes=5)},
+        )[0]
+
+    def test_click_logs_event_for_participant(self):
+        from django.urls import reverse
+        self.client.force_login(self.swiper)
+        response = self.client.post(
+            reverse("opener_click", args=[self.match.id]), {"index": 1})
+        self.assertEqual(response.status_code, 200)
+        event = ProductEvent.objects.get(name=ProductEvent.Name.OPENER_CLICKED)
+        self.assertEqual(event.properties["index"], 1)
+
+    def test_click_forbidden_for_non_participant(self):
+        from django.urls import reverse
+        User = get_user_model()
+        outsider = User.objects.create_user("clk_outsider", password="x")
+        self.client.force_login(outsider)
+        response = self.client.post(
+            reverse("opener_click", args=[self.match.id]), {"index": 0})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(ProductEvent.objects.count(), 0)

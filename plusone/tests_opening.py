@@ -263,3 +263,59 @@ class InjectionDefenseTests(TestCase):
         self.assertNotIn("phone", joined)
         self.assertNotIn("wechat", joined)
         self.assertGreaterEqual(len(openers), 2)
+
+
+class ReplyModeTests(TestCase):
+    """Session-scoped memory: once the chat has messages, the assistant
+    suggests replies that continue the conversation."""
+
+    def setUp(self):
+        self.llm_env = patch.dict(os.environ, {"DEEPSEEK_API_KEY": "", "OPENAI_API_KEY": ""})
+        self.llm_env.start()
+        self.addCleanup(self.llm_env.stop)
+        User = get_user_model()
+        self.poster = User.objects.create_user("rm_poster", password="x")
+        self.swiper = User.objects.create_user("rm_swiper", password="x")
+        UserProfile.objects.create(user=self.poster, display_name="A", interests="basketball")
+        UserProfile.objects.create(user=self.swiper, display_name="B", interests="basketball")
+        self.location, _ = CampusLocation.objects.update_or_create(
+            name="Campus Sports Hall",
+            defaults={
+                "location_type": CampusLocation.LocationType.SPORTS,
+                "area": "Central Campus",
+            },
+        )
+        self.post = ActivityPost.objects.create(
+            user=self.poster, title="Basketball", description="x",
+            activity_type=ActivityPost.ActivityType.SPORTS, location=self.location,
+            start_time=timezone.now() + timedelta(hours=3),
+            expire_time=timezone.now() + timedelta(hours=1),
+        )
+        self.match = Match.objects.create(
+            post=self.post, poster=self.poster, swiper=self.swiper,
+            chat_expires_at=timezone.now() + timedelta(minutes=5))
+
+    def test_context_includes_recent_messages_without_names(self):
+        from plusone.models import ChatMessage
+        ChatMessage.objects.create(match=self.match, sender=self.poster, message="see you at 7?")
+        context = gather_context(self.match, self.swiper)
+        self.assertEqual(len(context["recent_messages"]), 1)
+        self.assertEqual(context["recent_messages"][0]["from"], "partner")
+        self.assertNotIn("rm_poster", repr(context))
+
+    def test_rule_fallback_switches_to_reply_mode(self):
+        from plusone.models import ChatMessage
+        ChatMessage.objects.create(match=self.match, sender=self.poster, message="see you at 7?")
+        context = gather_context(self.match, self.swiper)
+        replies = rule_generate_openers(context)
+        self.assertGreaterEqual(len(replies), 2)
+        joined = " ".join(r["text"] for r in replies).lower()
+        # Reply mode drives toward the plan, not another introduction.
+        self.assertNotIn("i noticed we both", joined)
+
+    def test_empty_chat_stays_in_opener_mode(self):
+        context = gather_context(self.match, self.swiper)
+        self.assertEqual(context["recent_messages"], [])
+        openers = rule_generate_openers(context)
+        joined = " ".join(o["text"] for o in openers).lower()
+        self.assertIn("basketball", joined)

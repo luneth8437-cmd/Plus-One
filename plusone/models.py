@@ -283,6 +283,7 @@ class ProductEvent(models.Model):
         PUBLISH_CARD = "publish_card", "Card published"
         MATCH_CREATED = "match_created", "Match created"
         OPENER_SUGGESTED = "opener_suggested", "Openers suggested"
+        OPENER_CLICKED = "opener_clicked", "Opener suggestion clicked"
         FIRST_MESSAGE_SENT = "first_message_sent", "First message sent"
         MESSAGE_SENT = "message_sent", "Message sent"
         FIRST_REPLY_RECEIVED = "first_reply_received", "First reply received"

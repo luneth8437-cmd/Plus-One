@@ -98,13 +98,19 @@
       <form method="post" class="opener-assist-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="suggest_openers">
-        <button type="submit" class="secondary-action opener-assist-button">Suggest openers</button>
-        <span class="helptext">AI drafts a first message from both activity cards. You pick and send.</span>
+        <button type="submit" class="secondary-action opener-assist-button">
+          {% if has_user_messages %}Suggest replies{% else %}Suggest openers{% endif %}
+        </button>
+        <span class="helptext">
+          {% if has_user_messages %}AI suggests a next message based on this conversation. You pick and send.{% else %}AI drafts a first message from both activity cards. You pick and send.{% endif %}
+        </span>
       </form>
       {% if opener_suggestions %}
-        <div class="opener-suggestions" aria-label="Suggested openers">
+        <div class="opener-suggestions" aria-label="Suggested messages"
+             data-opener-track-url="{% url 'opener_click' match.id %}">
           {% for suggestion in opener_suggestions %}
-            <button type="button" class="opener-suggestion" data-quick-reply="{{ suggestion.text }}">
+            <button type="button" class="opener-suggestion" data-quick-reply="{{ suggestion.text }}"
+                    data-opener-index="{{ forloop.counter0 }}">
               <span class="opener-text">{{ suggestion.text }}</span>
               {% if suggestion.reason %}<small class="opener-reason">{{ suggestion.reason }}</small>{% endif %}
             </button>

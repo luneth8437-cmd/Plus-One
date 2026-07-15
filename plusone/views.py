@@ -319,8 +319,33 @@ def chat(request, match_id):
             "viewer_agreed": viewer_agreed,
             "other_agreed": other_agreed,
             "opener_suggestions": opener_suggestions,
+            # Reply mode: once real conversation exists, the assistant
+            # suggests continuations instead of first messages.
+            "has_user_messages": any(not m.is_system for m in messages_list),
         },
     )
+
+
+@login_required
+def opener_click(request, match_id):
+    # Analytics-only endpoint: records that a suggestion was clicked into the
+    # input. Best-effort - failures must never affect the chat experience.
+    if request.method != "POST":
+        return JsonResponse({"ok": False}, status=405)
+    match = get_object_or_404(Match.objects.select_related("poster", "swiper"), id=match_id)
+    if not match.is_participant(request.user):
+        return HttpResponseForbidden("Only matched users can access this chat.")
+    try:
+        index = int(request.POST.get("index", -1))
+    except (TypeError, ValueError):
+        index = -1
+    log_event(
+        ProductEvent.Name.OPENER_CLICKED,
+        user=request.user,
+        match=match,
+        properties={"index": index},
+    )
+    return JsonResponse({"ok": True})
 
 
 @login_required

@@ -219,8 +219,25 @@ function setupChatPolling() {
       input.value = button.dataset.quickReply || "";
       input.focus();
       clearChatWarning();
+      trackOpenerClick(button);
     });
   });
+
+  function trackOpenerClick(button) {
+    // Analytics only (opener_clicked): fire-and-forget, never block the UI.
+    const container = button.closest("[data-opener-track-url]");
+    if (!container || button.dataset.openerIndex === undefined) return;
+    const csrf = document.querySelector("[name=csrfmiddlewaretoken]");
+    if (!csrf) return;
+    const body = new FormData();
+    body.append("index", button.dataset.openerIndex);
+    body.append("csrfmiddlewaretoken", csrf.value);
+    fetch(container.dataset.openerTrackUrl, {
+      method: "POST",
+      body,
+      credentials: "same-origin",
+    }).catch(() => {});
+  }
 
   if (!isChatting) return;
 
