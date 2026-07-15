@@ -41,7 +41,9 @@ def _expected_date(spec, now):
     if "days" in date_spec:
         expected = today + timedelta(days=date_spec["days"])
         case_time = spec.get("time")
-        if date_spec["days"] == 0 and case_time:
+        # "anchored" = the text names the day explicitly (tonight/today);
+        # the product never moves an explicit date, so neither do we.
+        if date_spec["days"] == 0 and case_time and not spec.get("anchored"):
             hour, minute = (int(part) for part in case_time.split(":"))
             case_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
             if case_dt < now - timedelta(minutes=15):

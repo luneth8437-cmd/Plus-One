@@ -145,7 +145,10 @@ PARSING_CASES = [
         "expected": {
             "activity_type": "sports",
             "location_name": "Campus Sports Hall",
-            "start": {"date": {"days": 0}, "time": "20:00"},
+            # anchored: the user explicitly wrote "tonight", so the product
+            # never silently moves the date (same principle as the U6-U10
+            # fix); a past time is caught by the publish validator instead.
+            "start": {"date": {"days": 0}, "time": "20:00", "anchored": True},
         },
     },
     {
@@ -155,7 +158,7 @@ PARSING_CASES = [
         "expected": {
             "activity_type": "explore",
             "location_name": "Campus Quad",
-            "start": {"date": {"days": 0}, "time": "17:00"},
+            "start": {"date": {"days": 0}, "time": "17:00", "anchored": True},
         },
     },
     # --- Activity/location coverage ---
