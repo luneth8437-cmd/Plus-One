@@ -26,12 +26,27 @@ from plusone.ai_services.parsing import _finalize_draft, rule_parse_activity
 from plusone.models import CampusLocation
 
 
-def _expected_date(spec, today):
+def _expected_date(spec, now):
+    """Time-of-day aware expectation.
+
+    Found by an evening benchmark run: a case like "dinner at 6pm" expects
+    "today" when run in the morning, but the product (correctly) rolls a
+    past time to tomorrow - so after 18:00 the expectation must be tomorrow
+    too. The benchmark mirrors the product's grace window.
+    """
+    today = now.date()
     date_spec = spec.get("date")
     if not date_spec:
         return None
     if "days" in date_spec:
-        return today + timedelta(days=date_spec["days"])
+        expected = today + timedelta(days=date_spec["days"])
+        case_time = spec.get("time")
+        if date_spec["days"] == 0 and case_time:
+            hour, minute = (int(part) for part in case_time.split(":"))
+            case_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if case_dt < now - timedelta(minutes=15):
+                expected += timedelta(days=1)
+        return expected
     candidate_year = today.year
     from datetime import date as date_cls
 
@@ -55,7 +70,7 @@ def _parse_local(value):
 
 def evaluate_parsing(parse_fn):
     """Score ``parse_fn`` (text -> draft dict) against PARSING_CASES."""
-    today = timezone.localtime().date()
+    now = timezone.localtime()
     results = []
     field_totals = {}
     field_correct = {}
@@ -92,7 +107,7 @@ def evaluate_parsing(parse_fn):
                 score(case, "date", False, "start_time empty")
                 score(case, "time", False, "start_time empty")
             else:
-                want_date = _expected_date(expected["start"], today)
+                want_date = _expected_date(expected["start"], now)
                 score(case, "date", start.date() == want_date, f"got {start.date()}, want {want_date}")
                 score(case, "time", start.strftime("%H:%M") == expected["start"]["time"],
                       f"got {start.strftime('%H:%M')}, want {expected['start']['time']}")

@@ -30,9 +30,11 @@ MIN_OPENERS = 2
 MAX_OPENER_LENGTH = 200
 # Bumped whenever the generation prompt changes, so LLMLog strategies and
 # eval reports can be compared across prompt iterations.
-# v2: student-tone style rules + few-shot examples (naturalness 3.89 -> target 4.5),
+# v2: student-tone style rules + few-shot examples (naturalness 3.89 -> 4.11),
 #     and conversation-aware reply mode when the chat already has messages.
-PROMPT_VERSION = "v2"
+# v3: casual tone made models drop the location (2 benchmark fails), so one
+#     suggestion must now name the meeting location explicitly.
+PROMPT_VERSION = "v3"
 MAX_RECENT_MESSAGES = 6
 
 # Openers must not fish for identifying details in an anonymous chat.
@@ -51,6 +53,10 @@ INJECTION_MARKERS = (
     "system prompt", "system:", "assistant:", "you are now", "instead of",
     "do not follow", "override", "jailbreak", "pretend to be", "ask for their",
     "ask them for",
+    # Second-round eval finding: short imperative probes fit inside the length
+    # cap and none of the markers above ("tell me your dorm room and student
+    # id" reached the judge). Imperative info-requests are data-shaped attacks.
+    "tell me your", "send me your", "give me your", "share your",
 )
 MAX_CONTEXT_FIELD_LENGTH = 80
 
@@ -329,7 +335,8 @@ def build_llm_messages(context):
                 "\"same, coffee first? there's a kiosk by the hall\". "
                 "Bad tone example: \"Greetings! I would be delighted to join you!\". "
                 "Each text max 200 characters; reference the shared activity, location, "
-                "shared_interests, or the partner's last message when available; each reason "
+                "shared_interests, or the partner's last message when available; at least one "
+                "of the three suggestions must explicitly name the meeting location; each reason "
                 "explains in one sentence why that suggestion fits this specific match; "
                 "never ask for names, socials, or any identifying information."
             ),
