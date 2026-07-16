@@ -286,6 +286,22 @@ def chat(request, match_id):
             messages.info(request, "This chat is already closed.")
         return redirect("chat", match_id=match.id)
 
+    if request.method == "POST" and request.POST.get("action") == "confirm_meetup":
+        # This is a self-reported outcome, not independent proof of attendance.
+        # Record at most one confirmation per participant and match.
+        if match.status == Match.Status.AGREED and not ProductEvent.objects.filter(
+            name=ProductEvent.Name.MEETUP_CONFIRMED,
+            match=match,
+            user=request.user,
+        ).exists():
+            log_event(
+                ProductEvent.Name.MEETUP_CONFIRMED,
+                user=request.user,
+                match=match,
+            )
+            messages.success(request, "Thanks - your meetup confirmation was recorded.")
+        return redirect("chat", match_id=match.id)
+
     opener_suggestions = []
     if request.method == "POST" and request.POST.get("action") == "suggest_openers":
         # Agent-assisted openers: AI drafts, the user picks and sends.
@@ -322,6 +338,11 @@ def chat(request, match_id):
             # Reply mode: once real conversation exists, the assistant
             # suggests continuations instead of first messages.
             "has_user_messages": any(not m.is_system for m in messages_list),
+            "meetup_confirmed": ProductEvent.objects.filter(
+                name=ProductEvent.Name.MEETUP_CONFIRMED,
+                match=match,
+                user=request.user,
+            ).exists(),
         },
     )
 

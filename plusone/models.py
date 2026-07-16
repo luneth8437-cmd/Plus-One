@@ -288,6 +288,7 @@ class ProductEvent(models.Model):
         MESSAGE_SENT = "message_sent", "Message sent"
         FIRST_REPLY_RECEIVED = "first_reply_received", "First reply received"
         AGREE_CLICKED = "agree_clicked", "Agree clicked"
+        MEETUP_CONFIRMED = "meetup_confirmed", "Meetup outcome confirmed"
 
     name = models.CharField(max_length=40, choices=Name.choices)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
