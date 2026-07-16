@@ -8,6 +8,7 @@ Funnel (see docs/product_validation/04_analytics_event_plan.md):
 
     publish_card -> match_created -> first_message_sent
     -> first_reply_received -> agree_clicked -> both agreed
+    -> meetup_confirmed
 
 Opener assistant adoption is reported alongside:
     opener_suggested sessions, and the share of first messages that used a
@@ -50,6 +51,7 @@ def build_report(days=None):
     if since:
         agreed_qs = agreed_qs.filter(created_at__gte=since)
     both_agreed = agreed_qs.count()
+    meetups = _distinct_matches(ProductEvent.Name.MEETUP_CONFIRMED, since)
 
     opener_sessions = _count(ProductEvent.Name.OPENER_SUGGESTED, since)
     opener_clicks = _count(ProductEvent.Name.OPENER_CLICKED, since)
@@ -72,12 +74,14 @@ def build_report(days=None):
             "matches_with_first_reply": first_replies,
             "matches_with_agree": agree_matches,
             "matches_both_agreed": both_agreed,
+            "matches_with_meetup_confirmed": meetups,
         },
         "conversion": {
             "publish_to_match_pct": rate(matches, published),
             "match_to_first_message_pct": rate(first_messages, matches),
             "first_message_to_reply_pct": rate(first_replies, first_messages),
             "match_to_both_agreed_pct": rate(both_agreed, matches),
+            "agreed_to_meetup_confirmed_pct": rate(meetups, both_agreed),
         },
         "opening_assistant": {
             "suggestion_sessions": opener_sessions,

@@ -66,6 +66,15 @@
           </ul>
         </div>
         <div class="handoff-actions">
+          {% if meetup_confirmed %}
+            <p class="helptext">Meetup recorded - hope it went well!</p>
+          {% else %}
+            <form method="post" class="confirm-meetup-form">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="confirm_meetup">
+              <button type="submit" class="primary-action">We met - record it</button>
+            </form>
+          {% endif %}
           <a class="primary-action" href="{% url 'dashboard' %}">Back to Dashboard</a>
           <a class="secondary-action" href="{% url 'create_post' %}">Create another Plus One</a>
         </div>

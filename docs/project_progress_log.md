@@ -1624,3 +1624,28 @@ Next step:
 Technical decisions:
 
 - Prefer two flow GIFs over separate static page screenshots for the GitHub front page because they communicate the product loop more clearly.
+
+## 2026-07-16: Added Self-Reported Meetup Confirmation
+
+Problem or confusion:
+
+- The live funnel ended at mutual agreement and handoff, so the product could not collect even a self-reported signal that the offline meetup occurred.
+- A non-Git local code copy contained an unfinished version of the feature, including conflicting migrations, and could not be deployed directly.
+
+Diagnosis:
+
+- The deployable source of truth was the GitHub `deepseek-api` branch, not the local code copy.
+- The smallest safe change was a post-agreement confirmation action, one event per participant and match, plus the corresponding funnel-report stage.
+
+Worked:
+
+- Added a `We met - record it` action that appears only after both participants agree.
+- Added the `meetup_confirmed` product event and prevented duplicate confirmations by the same participant for the same match.
+- Extended the funnel report with confirmed-meetup counts and the mutual-agreement-to-confirmation conversion.
+- Added tests for visibility, duplicate suppression, funnel reporting, and rejection before mutual agreement.
+- The full Django suite passes: 123 tests, zero system-check issues.
+
+Current status:
+
+- The signal is explicitly self-reported; it does not independently prove that the meetup happened.
+- The feature is ready for deployment and live-flow verification.

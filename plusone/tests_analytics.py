@@ -173,3 +173,78 @@ class OpenerClickEventTests(TestCase):
             reverse("opener_click", args=[self.match.id]), {"index": 0})
         self.assertEqual(response.status_code, 403)
         self.assertEqual(ProductEvent.objects.count(), 0)
+
+
+class MeetupConfirmationTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.poster = User.objects.create_user("meet_poster", password="x")
+        self.swiper = User.objects.create_user("meet_swiper", password="x")
+        location, _ = CampusLocation.objects.update_or_create(
+            name="Campus Sports Hall",
+            defaults={
+                "location_type": CampusLocation.LocationType.SPORTS,
+                "area": "Central Campus",
+            },
+        )
+        post = ActivityPost.objects.create(
+            user=self.poster,
+            title="Badminton meetup",
+            description="Casual game",
+            activity_type=ActivityPost.ActivityType.SPORTS,
+            location=location,
+            start_time=timezone.now() + timedelta(hours=3),
+            expire_time=timezone.now() + timedelta(hours=1),
+        )
+        self.match = Match.objects.create(
+            post=post,
+            poster=self.poster,
+            swiper=self.swiper,
+            chat_expires_at=timezone.now() + timedelta(minutes=5),
+            status=Match.Status.AGREED,
+            poster_agreed=True,
+            swiper_agreed=True,
+        )
+
+    def test_agreed_participant_can_confirm_once(self):
+        from django.urls import reverse
+
+        self.client.force_login(self.swiper)
+        url = reverse("chat", args=[self.match.id])
+
+        response = self.client.get(url)
+        self.assertContains(response, "We met - record it")
+
+        self.client.post(url, {"action": "confirm_meetup"})
+        self.client.post(url, {"action": "confirm_meetup"})
+
+        self.assertEqual(
+            ProductEvent.objects.filter(
+                name=ProductEvent.Name.MEETUP_CONFIRMED,
+                match=self.match,
+                user=self.swiper,
+            ).count(),
+            1,
+        )
+        self.assertEqual(build_report()["funnel"]["matches_with_meetup_confirmed"], 1)
+
+        response = self.client.get(url)
+        self.assertNotContains(response, "We met - record it")
+        self.assertContains(response, "Meetup recorded")
+
+    def test_confirmation_is_rejected_before_both_agree(self):
+        from django.urls import reverse
+
+        self.match.status = Match.Status.CHATTING
+        self.match.poster_agreed = False
+        self.match.save(update_fields=["status", "poster_agreed"])
+        self.client.force_login(self.swiper)
+
+        self.client.post(
+            reverse("chat", args=[self.match.id]),
+            {"action": "confirm_meetup"},
+        )
+
+        self.assertFalse(
+            ProductEvent.objects.filter(name=ProductEvent.Name.MEETUP_CONFIRMED).exists()
+        )
