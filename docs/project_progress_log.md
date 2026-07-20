@@ -1689,11 +1689,11 @@ Failed or abandoned:
 Current status:
 
 - The repository has fewer duplicate documents and fewer manually maintained dependency entries, with no core product behavior changed.
-- The working tree contains the intended optimization changes and has not been committed or pushed.
+- The optimization is published on `agent/trim-repository-redundancy` in draft PR #2, targeting `deepseek-api`.
 
 Next step:
 
-- Review the diff, then commit and push the optimization changes to `deepseek-api` when approved.
+- Review draft PR #2 and merge it into `deepseek-api` when approved.
 
 Technical decisions:
 
