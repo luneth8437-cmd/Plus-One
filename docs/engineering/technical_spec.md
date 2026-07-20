@@ -8,7 +8,7 @@ Scope: how Plus One is built and why. Companion documents: `api_contract.md`,
 ```
 Browser (Django templates + vanilla JS polling)
   -> Django 5 views (request routing only)
-    -> services/   (state transitions: matching, chat, identity, demo, analytics)
+    -> services/   (state transitions: matching, chat, identity, analytics)
     -> selectors/  (read-side query composition)
     -> ai_services/ (parse / moderate / openers, each with deterministic fallback)
   -> PostgreSQL (prod) / SQLite (dev, CI)

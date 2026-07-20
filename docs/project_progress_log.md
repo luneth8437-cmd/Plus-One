@@ -1649,3 +1649,105 @@ Current status:
 
 - The signal is explicitly self-reported; it does not independently prove that the meetup happened.
 - The feature is ready for deployment and live-flow verification.
+
+## 2026-07-20: Removed Repository Redundancy and Unified Evaluation Evidence
+
+Problem or confusion:
+
+- The main dependency file mixed direct application dependencies with 17 transitive packages, increasing routine maintenance without documenting a lock-file strategy.
+- An early AI evaluation plan and a separate mentor run guide duplicated newer README and validation documentation.
+- Repeated benchmark summaries had drifted from the latest committed 2026-07-15 evaluation reports.
+- Three modules contained unused imports, and the AI compatibility facade retained unused legacy re-exports.
+
+Diagnosis:
+
+- The deployable source of truth remains the GitHub-aligned `deploy_checkout` on branch `deepseek-api`.
+- `requirements.txt` only needs the seven packages imported or invoked directly by the application and deployment configuration; pip resolves their transitive dependencies.
+- `docs/product_validation/eval_results/2026-07-15-fallback.md` and `2026-07-15-llm.md` are the authoritative inputs for the current benchmark summary.
+- `docs/ai_evaluation.md` and `MENTOR_RUN.md` contained no unique workflow that could not be preserved in the README.
+
+Tried:
+
+- Searched all tracked Python, Markdown, template, and JavaScript files for references to dependency names, legacy AI facade exports, and the two candidate documents.
+- Compared README and product-decision metrics directly against both committed 2026-07-15 evaluation reports.
+- Created a brand-new temporary virtual environment and installed only the reduced `requirements.txt`.
+- Ran Django system checks, migration drift detection, the full test suite, JavaScript syntax validation, Python parsing, Markdown local-link validation, and `git diff --check`.
+
+Worked:
+
+- Reduced `requirements.txt` from 24 entries to seven direct dependencies; a clean install restored all required transitive packages automatically.
+- Deleted the obsolete AI evaluation plan and mentor run guide, preserving the reviewer seed instruction in README.
+- Removed three unused imports and seven unused legacy re-export lines without changing the four runtime AI wrapper functions.
+- Updated README, AI evaluation results, and model-selection documentation to the committed 2026-07-15 evidence: fallback 18/19, LLM 17/19, and LLM parse latency avg 1403ms / p95 1892ms.
+- Verified all 123 Django tests pass in the clean environment; system checks, migration checks, JavaScript syntax, Python syntax, Markdown links, and diff whitespace checks also pass.
+
+Failed or abandoned:
+
+- No implementation path failed.
+- Did not remove migrations, package `__init__.py` files, dated evaluation reports, the two flow GIFs, or this progress log because each still has a distinct repository role.
+
+Current status:
+
+- The repository has fewer duplicate documents and fewer manually maintained dependency entries, with no core product behavior changed.
+- The optimization is published on `agent/trim-repository-redundancy` in draft PR #2, targeting `deepseek-api`.
+
+Next step:
+
+- Review draft PR #2 and merge it into `deepseek-api` when approved.
+
+Technical decisions:
+
+- Keep direct dependencies in `requirements.txt`; introduce a separate generated lock file later only if reproducible transitive pinning becomes a project requirement.
+- Treat dated files in `docs/product_validation/eval_results/` as raw benchmark evidence and derive summary claims from the latest committed pair.
+- Keep `plusone/ai.py` as a narrow runtime/test seam, but do not expose unused implementation symbols through it.
+
+## 2026-07-20: Removed the Online Auto-Demo Runtime
+
+Problem or confusion:
+
+- The public product still contained an optional online demo mode that automatically created partner cards, greeted visitors, replied in chat, and agreed to meet.
+- Demo-specific runtime hooks were mixed into Discover, matching, chat, models, templates, analytics properties, settings, and tests.
+- The keepalive workflow was named for the demo even though its only job is to reduce Render cold starts.
+
+Diagnosis:
+
+- `plusone/services/demo.py` was the complete online auto-demo implementation, enabled through `PLUSONE_DEMO_MODE`.
+- `views.discover`, `services.matching`, and `services.chat` called the demo service from real request paths.
+- `seed_demo` is a manually invoked local sample-data command, and `seed_funnel_demo` is an internal analytics smoke tool; neither is the removed online runtime.
+- `.github/workflows/keepalive.yml` only sends an HTTP request to the live URL and does not create users, cards, messages, or agreements.
+
+Tried:
+
+- Searched application code, templates, settings, workflows, README, and engineering docs for all demo-mode symbols and UI markers.
+- Removed the online runtime and then repeated the search for `PLUSONE_DEMO_MODE`, demo service imports, automatic demo callbacks, demo-card properties, and demo UI chips.
+- Ran Django system checks, migration drift detection, the complete remaining test suite, Python syntax parsing, JavaScript syntax validation, Markdown local-link validation, and `git diff --check`.
+
+Worked:
+
+- Deleted `plusone/services/demo.py` and its five dedicated tests.
+- Removed automatic demo-card creation from Discover and automatic partner behavior from matching and chat.
+- Removed `PLUSONE_DEMO_MODE`, the demo-card model property, the analytics `demo_partner` property, Demo template badges, and Demo-specific CSS.
+- Replaced Demo-specific README claims with a plain live-app description and kept only the optional local sample-data instruction.
+- Updated engineering documentation and corrected the test catalog to 118 automated tests.
+- Retained the keepalive schedule but renamed it for the live app and clarified that it only reduces cold starts.
+- Verified all 118 tests pass with no system-check or migration issues.
+
+Failed or abandoned:
+
+- No implementation path failed.
+- Did not delete `seed_demo` or `seed_funnel_demo` because they are manual local/QA tools, not online automatic behavior.
+- Did not delete the keepalive workflow because the user asked what it does; it remains useful independently of demo mode.
+
+Current status:
+
+- The application no longer contains an online auto-partner or auto-seeded Demo-card runtime.
+- `agent/trim-repository-redundancy` and draft PR #2 are the delivery path for this removal.
+
+Next step:
+
+- Review draft PR #2 and decide whether the independent live-app keepalive schedule should remain before merge.
+
+Technical decisions:
+
+- Keep infrastructure availability concerns separate from product simulation behavior.
+- Preserve manual local sample data and scripted analytics traffic while removing all user-facing automatic Demo behavior.

@@ -10,7 +10,6 @@ from plusone.ai import generate_icebreaker
 from plusone.models import ActivityPost, ChatMessage, Match, ProductEvent, Swipe
 from plusone.services.analytics import log_event
 from plusone.services.capacity import effective_capacity, holding_match_count
-from plusone.services.demo import is_demo_user, maybe_demo_partner_react
 
 SQLITE_LOCK_RETRY_DELAYS = (0.05, 0.15)
 
@@ -65,10 +64,8 @@ def handle_swipe(user, post_id, action):
         match=created_match,
         properties={
             "activity_type": created_match.post.activity_type,
-            "demo_partner": is_demo_user(created_match.post.user),
         },
     )
-    maybe_demo_partner_react(created_match)
     return result
 
 

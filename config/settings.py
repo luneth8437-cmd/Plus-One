@@ -196,12 +196,6 @@ LOGOUT_REDIRECT_URL = "discover"
 PLUSONE_OPENAI_MODEL = "gpt-4o-mini"
 PLUSONE_DEEPSEEK_MODEL = "deepseek-v4-flash"
 
-# Demo mode: keeps a small pool of labeled demo cards live and lets a demo
-# partner auto-reply and auto-agree, so a single visitor (e.g. an interviewer)
-# can experience match -> chat -> opening assistant -> handoff alone.
-# Off by default; the production instance opts in explicitly.
-PLUSONE_DEMO_MODE = os.environ.get("PLUSONE_DEMO_MODE", "") == "1"
-
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 

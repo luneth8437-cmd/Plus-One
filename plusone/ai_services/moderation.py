@@ -27,7 +27,7 @@ def rule_moderate_text(text):
     return {
         "flagged": bool(hits),
         "categories": hits,
-        "reason": "Matched demo safety keywords." if hits else "No demo safety keyword matched.",
+        "reason": "Matched safety keywords." if hits else "No safety keyword matched.",
     }
 
 

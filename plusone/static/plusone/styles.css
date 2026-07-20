@@ -2744,13 +2744,6 @@ code {
   font-size: 18px;
 }
 
-.demo-chip {
-  background: var(--lemon, #ffe9a8) !important;
-  color: #5c4a00 !important;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-
 .draft-warnings {
   display: grid;
   gap: 8px;

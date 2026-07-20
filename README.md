@@ -5,14 +5,10 @@
 
 Plus One is an AI-assisted anonymous campus activity matcher. Create a temporary card, match with another student, chat briefly, and decide whether to meet.
 
-Live demo: https://plusone-ub3w.onrender.com/
+Live app: https://plusone-ub3w.onrender.com/
 
-> Try it alone in ~3 minutes: the demo instance keeps a few labeled **Demo**
-> cards live. Swipe interested on one, and a demo partner replies and agrees
-> automatically, so a single visitor can experience match -> five-minute
-> anonymous chat -> AI opener suggestions -> mutual-agreement handoff.
-> (Free-tier hosting: if the page takes up to a minute on first load, the
-> instance is waking up.)
+> The app runs on Render's free tier. If the first request takes up to a
+> minute, the instance is waking from an idle period.
 
 GitHub repo: https://github.com/luneth8437-cmd/Plus-One
 
@@ -21,15 +17,15 @@ If you find the idea useful, a GitHub Star helps other people discover the proje
 ## Evidence and Metrics
 
 Every AI capability ships with a benchmark, adversarial tests, and product
-analytics. Latest measured results (2026-07-14, reproducible via
+analytics. Latest measured results (2026-07-15, reproducible via
 `manage.py evaluate_ai` and `manage.py funnel_report`):
 
 | Area | Result |
 | --- | --- |
 | Draft parsing (deterministic guardrail layer) | activity type 95%, dates/times 11/11 correct, ~0ms |
-| Draft parsing (LLM pipeline) | activity type 89%, dates/times 11/11, avg 1.55s / p95 2.07s |
+| Draft parsing (LLM pipeline) | activity type 89%, dates/times 11/11, avg 1.40s / p95 1.89s |
 | Safety moderation | precision 1.00 / recall 1.00 on the benchmark set |
-| Opening assistant | 9/9 deterministic, 8/9 LLM benchmark cases; judge scores 4.2 relevance / 3.9 naturalness / 4.9 safety (1-5) |
+| Opening assistant | 9/9 deterministic and LLM benchmark cases; judge scores 4.44 relevance / 4.44 naturalness / 4.78 safety (1-5) |
 | Prompt-injection defense | 3 adversarial cases (profile-field injection), zero leakage; the LLM judge also receives sanitized context |
 | Funnel (scripted instrumentation check, 20 sessions) | publish -> match 85% -> first message 76.5% -> both agreed 47.1%; 46.2% of first messages used an AI opener |
 
@@ -77,7 +73,7 @@ Plus One includes a validation workspace for turning prototype feedback into pro
 - [Mechanism comparison](docs/product_validation/02_mechanism_comparison.md)
 - [Usability test report](docs/product_validation/03_usability_test_report.md)
 - [Analytics event plan](docs/product_validation/04_analytics_event_plan.md)
-- [AI evaluation results template](docs/product_validation/05_ai_evaluation_results.md)
+- [AI evaluation results](docs/product_validation/05_ai_evaluation_results.md)
 - [Product decision log](docs/product_validation/06_product_decision_log.md)
 - [Iteration case studies](docs/product_validation/07_iteration_case_studies.md)
 
@@ -138,6 +134,9 @@ http://127.0.0.1:8000/
 
 No registration is required. The first visit creates a temporary anonymous session identity and opens Discover. The session remains available in that browser until cookies/session data are cleared or the user starts fresh.
 
+For an optional local sample dataset, run
+`.venv/bin/python manage.py seed_demo` after the migration.
+
 ## AI Behavior
 
 If `DEEPSEEK_API_KEY` is set, the app uses DeepSeek through the OpenAI-compatible API for:
@@ -181,6 +180,7 @@ To run one hosted instance that keeps `DEEPSEEK_API_KEY` on the server and lets 
 - [Security policy](SECURITY.md)
 - [MIT license](LICENSE)
 - [Product validation workspace](docs/product_validation/README.md)
+- [Engineering documentation](docs/engineering/technical_spec.md)
 
 ## Safety and Privacy
 

@@ -1,7 +1,7 @@
 # Module Inventory
 
 Build/review order follows the product's dependency chain: identity ->
-supply -> matching -> chat -> AI assistance -> instrumentation -> demo.
+supply -> matching -> chat -> AI assistance -> instrumentation.
 
 | # | Module | Files | Responsibility | Priority |
 | --- | --- | --- | --- | --- |
@@ -14,9 +14,8 @@ supply -> matching -> chat -> AI assistance -> instrumentation -> demo.
 | 7 | Opening assistant | `ai_services/opening_assistant.py` | Context gathering, injection sanitization, generation (v2 prompt, reply mode), validation, fallback | P1 |
 | 8 | Analytics | `models.ProductEvent`, `services/analytics.py`, `management/commands/funnel_report.py` | Server-side funnel + opener adoption attribution | P1 - decisions depend on it |
 | 9 | Evaluation | `ai_services/eval_cases.py`, `management/commands/evaluate_ai.py`, `calibrate_judge.py` | Benchmarks, adversarial cases, LLM-as-judge + human calibration | P1 - runs in CI |
-| 10 | Demo mode | `services/demo.py` | Labeled supply + auto-partner so one visitor sees the full loop | P2 - portfolio/demo concern |
-| 11 | Read-side | `selectors.py`, `presenters.py` | Query composition and template payload shaping | P2 |
-| 12 | Ops | `seed_demo`, `seed_funnel_demo`, `expire_records`, `cleanup_anonymous_sessions` | Seeding, TTL sweeps, retention | P2 |
+| 10 | Read-side | `selectors.py`, `presenters.py` | Query composition and template payload shaping | P2 |
+| 11 | Ops | `seed_demo`, `seed_funnel_demo`, `expire_records`, `cleanup_anonymous_sessions` | Local sample data, instrumentation smoke traffic, TTL sweeps, retention | P2 |
 
 Frontend: one CSS file, one JS file (countdowns, chat polling/async send,
 quick replies + opener click tracking, create-form live preview). No build
