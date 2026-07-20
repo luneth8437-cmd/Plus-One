@@ -1,6 +1,6 @@
 # Test Case Catalog
 
-116+ automated tests run on every push (`.github/workflows/ci.yml`), plus a
+118 automated tests run on every push (`.github/workflows/ci.yml`), plus a
 non-test benchmark suite (`evaluate_ai`) whose report uploads as a CI
 artifact. Philosophy: every bug found by usability testing or by the
 benchmark becomes a permanent regression test.
@@ -11,9 +11,8 @@ benchmark becomes a permanent regression test.
 | --- | --- | --- | --- |
 | Core product | `plusone/tests.py` | 76 | Anonymous identity create/reset; post publish/edit/cancel; discovery filter rules; swipe/match concurrency outcomes; chat permissions and expiry; agreement handoff; moderation blocking + logging; dashboard state separation; AI parse/moderate fallbacks (mocked LLM) |
 | Draft guardrails | `plusone/tests_validation.py` | 17 | Explicit-date extraction (month-name, day-month, ISO, numeric, weekday, year rollover); expiry clamping incl. the observed 1440-minute case (U3); U6-U10 date-shift regression; missing-time warning (U1-U5); publish blocked on date conflict until confirmed |
-| Opening assistant | `plusone/tests_opening.py` | 13 | Context assembly without identity leakage; shared-interest computation; validation drops unsafe/probing/overlong/duplicate outputs; personalized deterministic fallback; mocked-LLM end-to-end + top-up; failure -> fallback with logging; view renders without sending; closed-chat refusal; non-participant 403; injection defense (field stripping, per-token interest filtering, sanitize_context, output probes) |
-| Analytics | `plusone/tests_analytics.py` | 5 | publish/match/message/first-reply/agree events; opener adoption classification (verbatim/edited/none); funnel_report aggregation; **privacy: no chat text ever stored in events** |
-| Demo mode | `plusone/tests_demo.py` | 5 | Seeding on/off via settings; no duplicate seeding; single-visitor reach-handoff loop; reply cap; no analytics pollution; Demo badge rendering |
+| Opening assistant | `plusone/tests_opening.py` | 16 | Context assembly without identity leakage; shared-interest computation; validation drops unsafe/probing/overlong/duplicate outputs; personalized deterministic fallback; mocked-LLM end-to-end + top-up; failure -> fallback with logging; view renders without sending; closed-chat refusal; non-participant 403; injection defense (field stripping, per-token interest filtering, sanitize_context, output probes) |
+| Analytics | `plusone/tests_analytics.py` | 9 | publish/match/message/first-reply/agree/meetup-confirmed events; opener adoption classification (verbatim/edited/none); funnel_report aggregation; **privacy: no chat text ever stored in events** |
 
 ## Edge Conditions Explicitly Pinned
 

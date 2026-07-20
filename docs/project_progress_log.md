@@ -1700,3 +1700,54 @@ Technical decisions:
 - Keep direct dependencies in `requirements.txt`; introduce a separate generated lock file later only if reproducible transitive pinning becomes a project requirement.
 - Treat dated files in `docs/product_validation/eval_results/` as raw benchmark evidence and derive summary claims from the latest committed pair.
 - Keep `plusone/ai.py` as a narrow runtime/test seam, but do not expose unused implementation symbols through it.
+
+## 2026-07-20: Removed the Online Auto-Demo Runtime
+
+Problem or confusion:
+
+- The public product still contained an optional online demo mode that automatically created partner cards, greeted visitors, replied in chat, and agreed to meet.
+- Demo-specific runtime hooks were mixed into Discover, matching, chat, models, templates, analytics properties, settings, and tests.
+- The keepalive workflow was named for the demo even though its only job is to reduce Render cold starts.
+
+Diagnosis:
+
+- `plusone/services/demo.py` was the complete online auto-demo implementation, enabled through `PLUSONE_DEMO_MODE`.
+- `views.discover`, `services.matching`, and `services.chat` called the demo service from real request paths.
+- `seed_demo` is a manually invoked local sample-data command, and `seed_funnel_demo` is an internal analytics smoke tool; neither is the removed online runtime.
+- `.github/workflows/keepalive.yml` only sends an HTTP request to the live URL and does not create users, cards, messages, or agreements.
+
+Tried:
+
+- Searched application code, templates, settings, workflows, README, and engineering docs for all demo-mode symbols and UI markers.
+- Removed the online runtime and then repeated the search for `PLUSONE_DEMO_MODE`, demo service imports, automatic demo callbacks, demo-card properties, and demo UI chips.
+- Ran Django system checks, migration drift detection, the complete remaining test suite, Python syntax parsing, JavaScript syntax validation, Markdown local-link validation, and `git diff --check`.
+
+Worked:
+
+- Deleted `plusone/services/demo.py` and its five dedicated tests.
+- Removed automatic demo-card creation from Discover and automatic partner behavior from matching and chat.
+- Removed `PLUSONE_DEMO_MODE`, the demo-card model property, the analytics `demo_partner` property, Demo template badges, and Demo-specific CSS.
+- Replaced Demo-specific README claims with a plain live-app description and kept only the optional local sample-data instruction.
+- Updated engineering documentation and corrected the test catalog to 118 automated tests.
+- Retained the keepalive schedule but renamed it for the live app and clarified that it only reduces cold starts.
+- Verified all 118 tests pass with no system-check or migration issues.
+
+Failed or abandoned:
+
+- No implementation path failed.
+- Did not delete `seed_demo` or `seed_funnel_demo` because they are manual local/QA tools, not online automatic behavior.
+- Did not delete the keepalive workflow because the user asked what it does; it remains useful independently of demo mode.
+
+Current status:
+
+- The application no longer contains an online auto-partner or auto-seeded Demo-card runtime.
+- `agent/trim-repository-redundancy` and draft PR #2 are the delivery path for this removal.
+
+Next step:
+
+- Review draft PR #2 and decide whether the independent live-app keepalive schedule should remain before merge.
+
+Technical decisions:
+
+- Keep infrastructure availability concerns separate from product simulation behavior.
+- Preserve manual local sample data and scripted analytics traffic while removing all user-facing automatic Demo behavior.

@@ -5,14 +5,10 @@
 
 Plus One is an AI-assisted anonymous campus activity matcher. Create a temporary card, match with another student, chat briefly, and decide whether to meet.
 
-Live demo: https://plusone-ub3w.onrender.com/
+Live app: https://plusone-ub3w.onrender.com/
 
-> Try it alone in ~3 minutes: the demo instance keeps a few labeled **Demo**
-> cards live. Swipe interested on one, and a demo partner replies and agrees
-> automatically, so a single visitor can experience match -> five-minute
-> anonymous chat -> AI opener suggestions -> mutual-agreement handoff.
-> (Free-tier hosting: if the page takes up to a minute on first load, the
-> instance is waking up.)
+> The app runs on Render's free tier. If the first request takes up to a
+> minute, the instance is waking from an idle period.
 
 GitHub repo: https://github.com/luneth8437-cmd/Plus-One
 
@@ -138,9 +134,8 @@ http://127.0.0.1:8000/
 
 No registration is required. The first visit creates a temporary anonymous session identity and opens Discover. The session remains available in that browser until cookies/session data are cleared or the user starts fresh.
 
-For a reviewer-ready dataset, run `.venv/bin/python manage.py seed_demo` after
-the migration. This is optional; the public demo mode creates its own labeled
-demo cards when `PLUSONE_DEMO_MODE=1`.
+For an optional local sample dataset, run
+`.venv/bin/python manage.py seed_demo` after the migration.
 
 ## AI Behavior
 
