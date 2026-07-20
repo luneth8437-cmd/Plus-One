@@ -27,7 +27,7 @@ from django.utils import timezone
 
 from plusone.ai import generate_openers
 from plusone.forms import ActivityPostForm
-from plusone.models import ActivityPost, CampusLocation, Match, ProductEvent, UserProfile
+from plusone.models import CampusLocation, Match, ProductEvent, UserProfile
 from plusone.services.analytics import log_event
 from plusone.services.chat import create_chat_message, record_agreement
 from plusone.services.matching import SwipeOutcome, handle_swipe

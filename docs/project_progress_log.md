@@ -1649,3 +1649,54 @@ Current status:
 
 - The signal is explicitly self-reported; it does not independently prove that the meetup happened.
 - The feature is ready for deployment and live-flow verification.
+
+## 2026-07-20: Removed Repository Redundancy and Unified Evaluation Evidence
+
+Problem or confusion:
+
+- The main dependency file mixed direct application dependencies with 17 transitive packages, increasing routine maintenance without documenting a lock-file strategy.
+- An early AI evaluation plan and a separate mentor run guide duplicated newer README and validation documentation.
+- Repeated benchmark summaries had drifted from the latest committed 2026-07-15 evaluation reports.
+- Three modules contained unused imports, and the AI compatibility facade retained unused legacy re-exports.
+
+Diagnosis:
+
+- The deployable source of truth remains the GitHub-aligned `deploy_checkout` on branch `deepseek-api`.
+- `requirements.txt` only needs the seven packages imported or invoked directly by the application and deployment configuration; pip resolves their transitive dependencies.
+- `docs/product_validation/eval_results/2026-07-15-fallback.md` and `2026-07-15-llm.md` are the authoritative inputs for the current benchmark summary.
+- `docs/ai_evaluation.md` and `MENTOR_RUN.md` contained no unique workflow that could not be preserved in the README.
+
+Tried:
+
+- Searched all tracked Python, Markdown, template, and JavaScript files for references to dependency names, legacy AI facade exports, and the two candidate documents.
+- Compared README and product-decision metrics directly against both committed 2026-07-15 evaluation reports.
+- Created a brand-new temporary virtual environment and installed only the reduced `requirements.txt`.
+- Ran Django system checks, migration drift detection, the full test suite, JavaScript syntax validation, Python parsing, Markdown local-link validation, and `git diff --check`.
+
+Worked:
+
+- Reduced `requirements.txt` from 24 entries to seven direct dependencies; a clean install restored all required transitive packages automatically.
+- Deleted the obsolete AI evaluation plan and mentor run guide, preserving the reviewer seed instruction in README.
+- Removed three unused imports and seven unused legacy re-export lines without changing the four runtime AI wrapper functions.
+- Updated README, AI evaluation results, and model-selection documentation to the committed 2026-07-15 evidence: fallback 18/19, LLM 17/19, and LLM parse latency avg 1403ms / p95 1892ms.
+- Verified all 123 Django tests pass in the clean environment; system checks, migration checks, JavaScript syntax, Python syntax, Markdown links, and diff whitespace checks also pass.
+
+Failed or abandoned:
+
+- No implementation path failed.
+- Did not remove migrations, package `__init__.py` files, dated evaluation reports, the two flow GIFs, or this progress log because each still has a distinct repository role.
+
+Current status:
+
+- The repository has fewer duplicate documents and fewer manually maintained dependency entries, with no core product behavior changed.
+- The working tree contains the intended optimization changes and has not been committed or pushed.
+
+Next step:
+
+- Review the diff, then commit and push the optimization changes to `deepseek-api` when approved.
+
+Technical decisions:
+
+- Keep direct dependencies in `requirements.txt`; introduce a separate generated lock file later only if reproducible transitive pinning becomes a project requirement.
+- Treat dated files in `docs/product_validation/eval_results/` as raw benchmark evidence and derive summary claims from the latest committed pair.
+- Keep `plusone/ai.py` as a narrow runtime/test seam, but do not expose unused implementation symbols through it.

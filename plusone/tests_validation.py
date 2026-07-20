@@ -7,7 +7,7 @@ and out-of-range expiry values (U3).
 """
 
 import os
-from datetime import date, timedelta
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model

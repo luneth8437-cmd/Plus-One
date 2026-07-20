@@ -2,7 +2,7 @@
 
 Goal: document why Plus One uses deepseek-v4-flash behind a deterministic-first pipeline, what each AI call costs, and where agent-style AI is and is not justified in this product.
 
-Evidence base: `05_ai_evaluation_results.md` (benchmark + LLM-vs-fallback comparison, 2026-07-14), `LLMLog` production records, and the pipeline code in `plusone/ai_services/`.
+Evidence base: `05_ai_evaluation_results.md` (benchmark + LLM-vs-fallback comparison, latest committed run 2026-07-15), `LLMLog` production records, and the pipeline code in `plusone/ai_services/`.
 
 ## AI Surfaces and Their Requirements
 
@@ -19,14 +19,14 @@ Each AI surface has a different failure cost and latency budget, which drives a 
 | Criterion | deepseek-v4-flash (primary) | gpt-4o-mini (fallback provider) | Rule parser (always-on fallback) |
 | --- | --- | --- | --- |
 | Input / output price per 1M tokens | $0.14 / $0.28 (cache hit: $0.003 input) | $0.15 / $0.60 | $0 |
-| Measured parse latency (thinking disabled) | avg 1556ms, p50 1474ms, p95 2850ms (19-case benchmark, 2026-07-14) | not benchmarked in this project | ~0ms |
-| Regression-set accuracy with guardrails | 18/19 | not benchmarked | 18/19 |
+| Measured parse latency (thinking disabled) | avg 1403ms, p50 1373ms, p95 1892ms (19-case benchmark, 2026-07-15) | not benchmarked in this project | ~0ms |
+| Regression-set accuracy with guardrails | 17/19 | not benchmarked | 18/19 |
 | Chinese + English mixed input | Strong (relevant for a Chinese campus user base) | Adequate | English patterns only |
 | API shape | OpenAI-compatible (one client codepath for both providers) | Native | n/a |
 
 Why this pick, in order of weight: the OpenAI-compatible API means the provider is swappable via one env var (`DEEPSEEK_API_KEY` → `OPENAI_API_KEY`) with zero code change, so the choice is low-commitment by construction; output pricing is ~2x cheaper than the closest OpenAI equivalent; and reasoning ("thinking") can be disabled per call, which matters because a create-form parse must not spend seconds reasoning about a lunch invitation.
 
-`DEEPSEEK_THINKING` is disabled by default in `client.py` for exactly this reason: parsing and moderation are closed tasks where reasoning tokens add latency and cost without accuracy gain — the 2026-07-14 benchmark shows the non-reasoning pipeline already matches the deterministic parser (18/19) on the regression set.
+`DEEPSEEK_THINKING` is disabled by default in `client.py` for exactly this reason: parsing and moderation are closed tasks where reasoning tokens add latency and cost without a demonstrated accuracy gain — the 2026-07-15 benchmark shows the non-reasoning pipeline remains close to the deterministic parser (17/19 vs. 18/19) on the regression set.
 
 ## Cost per Call and per User
 
@@ -51,7 +51,7 @@ Three tiers, checked in order at call time (`client.py`):
 
 Every call logs provider, model, success, and latency to `LLMLog` (strategy `*_failed_rule_fallback` marks degradations), so the fallback trigger rate is measurable from production data rather than assumed.
 
-The benchmark justifies calling tier 3 a peer, not a degraded mode: with guardrails applied, fallback and LLM both score 18/19 on the regression set, failing different low-severity cases. Users lose ~1.5s of latency when the LLM is up and lose almost no accuracy when it is down.
+The benchmark justifies calling tier 3 a peer, not a degraded mode: with guardrails applied, fallback scores 18/19 and the LLM scores 17/19 on the regression set, with only low-severity activity-classification misses. Users lose ~1.4s of latency when the LLM is up and lose no measured accuracy when it is down.
 
 ## Why the Core Loop Is Not Agent-Based
 
@@ -59,7 +59,7 @@ The high-level question: Plus One could route creation, matching, and chat throu
 
 | Property the core loop needs | Deterministic pipeline + single LLM call | Agent loop |
 | --- | --- | --- |
-| Predictable latency on a blocking form | Yes (one bounded call, p95 2.85s) | No (variable step count) |
+| Predictable latency on a blocking form | Yes (one bounded call, p95 1.89s) | No (variable step count) |
 | Testable in CI without network | Yes (19-case benchmark runs on every push) | Hard (multi-step trajectories are expensive to evaluate) |
 | Bounded worst-case behavior | Yes (guardrails clamp/block; human publishes) | Weaker (each added step compounds error) |
 | Cheap at scale | Yes (~$0.0001/post) | 5-20x tokens per interaction |
@@ -75,7 +75,7 @@ Where an agent is justified — and shipped: the post-match opening assistant (`
 | --- | --- |
 | deepseek-v4-flash as primary model | Cheapest adequate model with controllable reasoning and an escape hatch to OpenAI via one env var |
 | Thinking disabled for parse/moderation | Closed tasks; benchmark shows no accuracy gain to pay latency for |
-| Deterministic pipeline as peer, not backup | Accuracy parity (18/19 both) at ~0ms; product works with zero API spend |
+| Deterministic pipeline as peer, not backup | Slightly higher measured accuracy (18/19 vs. 17/19) at ~0ms; product works with zero API spend |
 | No agent loop in the core flow | Blocking latency, CI testability, bounded behavior, and the human-commit safety line all argue against it |
 | Agent reserved for open-ended, low-stakes surfaces | Opening assistant fits the profile; core loop does not |
 
