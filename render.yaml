@@ -1,5 +1,5 @@
 databases:
-  - name: plusone-db
+  - name: plusone-db-v2
     databaseName: plusone
     user: plusone
     plan: free
@@ -14,7 +14,7 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: plusone-db
+          name: plusone-db-v2
           property: connectionString
       - key: SECRET_KEY
         generateValue: true
