@@ -9,9 +9,11 @@ from .models import ActivityPost, CampusLocation
 class ActivityAssistForm(forms.Form):
     raw_text = forms.CharField(
         label="Tell Plus One what you want to do",
+        max_length=2000,
         widget=forms.Textarea(
             attrs={
                 "rows": 4,
+                "maxlength": 2000,
                 "placeholder": "Example: Tonight around 7 I want to go to the basketball game at the sports hall.",
             }
         ),

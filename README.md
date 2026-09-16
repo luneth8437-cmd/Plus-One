@@ -136,6 +136,9 @@ No registration is required. The first visit creates a temporary anonymous sessi
 
 For an optional local sample dataset, run
 `.venv/bin/python manage.py seed_demo` after the migration.
+`seed_demo --reset` only replaces the two named demo users and their related
+records; it does not delete real users, posts, logs, or shared locations, and
+the reset option is disabled whenever `DEBUG=False`.
 
 ## AI Behavior
 
@@ -151,6 +154,8 @@ Set the key in your shell before running Django:
 export DEEPSEEK_API_KEY="your_deepseek_api_key"
 export DEEPSEEK_BASE_URL="https://api.deepseek.com"
 export PLUSONE_LLM_MODEL="deepseek-v4-flash"
+export PLUSONE_LLM_TIMEOUT_SECONDS="15"
+export PLUSONE_LLM_MAX_RETRIES="1"
 ```
 
 Do not commit API keys. If you prefer a local `.env` file, keep it untracked and load it before starting Django:
@@ -162,6 +167,15 @@ set +a
 ```
 
 If `DEEPSEEK_API_KEY` is not set but `OPENAI_API_KEY` is set, the app uses OpenAI. If no API key is set, the app automatically uses deterministic rule-based fallback. All AI and fallback calls are stored in `LLMLog`.
+
+Run the retention command as a dry run before deleting stale data. The three
+record types use independent defaults: anonymous identities 7 days, AI logs
+30 days, and product events 90 days.
+
+```bash
+.venv/bin/python manage.py cleanup_anonymous_sessions
+.venv/bin/python manage.py cleanup_anonymous_sessions --commit
+```
 
 Run the baseline evaluation:
 

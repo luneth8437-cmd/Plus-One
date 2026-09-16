@@ -11,6 +11,7 @@ services:
     plan: free
     buildCommand: "./build.sh"
     startCommand: "python -m gunicorn config.asgi:application -k uvicorn.workers.UvicornWorker"
+    healthCheckPath: "/healthz/"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -26,5 +27,9 @@ services:
         value: "https://api.deepseek.com"
       - key: PLUSONE_LLM_MODEL
         value: "deepseek-v4-flash"
+      - key: PLUSONE_LLM_TIMEOUT_SECONDS
+        value: "15"
+      - key: PLUSONE_LLM_MAX_RETRIES
+        value: "1"
       - key: WEB_CONCURRENCY
         value: "1"

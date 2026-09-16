@@ -1,3 +1,4 @@
+import math
 import os
 
 from django.conf import settings
@@ -5,6 +6,24 @@ from django.conf import settings
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash"
+DEFAULT_LLM_TIMEOUT_SECONDS = 15.0
+DEFAULT_LLM_MAX_RETRIES = 1
+
+
+def _positive_float_env(name, default):
+    try:
+        value = float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    return value if math.isfinite(value) and value > 0 else default
+
+
+def _nonnegative_int_env(name, default):
+    try:
+        value = int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    return value if 0 <= value <= 5 else default
 
 
 def llm_config():
@@ -48,7 +67,11 @@ def llm_client():
     except Exception:
         return None
 
-    kwargs = {"api_key": config["api_key"]}
+    kwargs = {
+        "api_key": config["api_key"],
+        "timeout": _positive_float_env("PLUSONE_LLM_TIMEOUT_SECONDS", DEFAULT_LLM_TIMEOUT_SECONDS),
+        "max_retries": _nonnegative_int_env("PLUSONE_LLM_MAX_RETRIES", DEFAULT_LLM_MAX_RETRIES),
+    }
     if config["base_url"]:
         kwargs["base_url"] = config["base_url"]
     return OpenAI(**kwargs), config

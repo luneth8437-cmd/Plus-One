@@ -84,18 +84,33 @@ def _close_message(reason):
 
 
 def create_chat_message(match, user, text):
+    if not match.is_participant(user) or match.status != Match.Status.CHATTING or match.chat_expired:
+        return None, {"flagged": False, "unavailable": True}
+
     moderation = moderate_text(user, text)
     if moderation.get("flagged"):
         # Unsafe messages are not persisted; logs still keep the moderation
         # decision for audit/debugging through LLMLog.
         return None, moderation
-    message = ChatMessage.objects.create(
-        match=match,
-        sender=user,
-        message=text,
-        is_flagged=False,
-    )
-    # Funnel events are derived server-side after the write; only the
-    # opener-usage classification is stored, never the message text.
-    log_message_events(match, user, text)
+    # Moderation happens before taking the lock so a slow provider call cannot
+    # block agreement/decline requests. Re-read the match under a row lock
+    # afterwards so a message cannot be written to a chat that closed while
+    # moderation was running.
+    with transaction.atomic():
+        locked_match = Match.objects.select_for_update().filter(id=match.id).first()
+        if not locked_match or not locked_match.is_participant(user):
+            return None, {**moderation, "unavailable": True}
+        locked_match.mark_chat_expired_if_needed()
+        if locked_match.status != Match.Status.CHATTING:
+            return None, {**moderation, "unavailable": True}
+
+        message = ChatMessage.objects.create(
+            match=locked_match,
+            sender=user,
+            message=text,
+            is_flagged=False,
+        )
+        # Funnel events are derived server-side after the write; only the
+        # opener-usage classification is stored, never the message text.
+        log_message_events(locked_match, user, text)
     return message, moderation

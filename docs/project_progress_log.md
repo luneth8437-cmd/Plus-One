@@ -1751,3 +1751,54 @@ Technical decisions:
 
 - Keep infrastructure availability concerns separate from product simulation behavior.
 - Preserve manual local sample data and scripted analytics traffic while removing all user-facing automatic Demo behavior.
+
+## 2026-09-16: Hardened Runtime Health, Chat Writes, and Data Retention
+
+Problem or confusion:
+
+- The keepalive ping used the product root, so every ping could create an anonymous identity.
+- A chat could close while external moderation was running and still accept the message afterwards.
+- AI calls had no explicit timeout/retry boundary, assisted post input was unbounded, and old AI/event records had no retention policy.
+- `seed_demo --reset` deleted all posts, locations, and AI logs instead of only demo-owned data.
+
+Diagnosis:
+
+- The production source of truth is `/Users/fillun/Desktop/plus-one/deploy_checkout` on `deepseek-api`.
+- The root view calls `ensure_anonymous_session`; the keepalive workflow therefore exercised a stateful product route.
+- `create_chat_message` moderated first and wrote using a stale in-memory `Match` without rechecking the database state.
+- `LLMLog` and `ProductEvent` use `SET_NULL`, so deleting anonymous users alone does not remove their historical content.
+
+Tried:
+
+- Added focused regression tests for a query-free health endpoint, a chat closing during moderation, input length, client timeout/retry configuration, independent retention windows, and demo reset isolation.
+- Installed dependencies in `/private/tmp/plusone-repair-venv` to avoid adding another environment or cache directory to the project.
+- Ran Django checks, migration drift detection, the focused operations tests, and the complete application test suite on SQLite.
+
+Worked:
+
+- Added `/healthz/`, configured Render to use it, and moved keepalive traffic off the stateful root route.
+- Rechecked and row-locked the match after moderation; closed/expired chats now return HTTP 409 without saving a message or analytics event.
+- Added a 2,000-character assist limit and explicit AI timeout/retry settings (15 seconds, one retry by default).
+- Extended `cleanup_anonymous_sessions` with independent 7/30/90-day identity, AI-log, and product-event windows while preserving dry-run behavior.
+- Restricted `seed_demo --reset` to `demo_alex` and `demo_blair` plus their related records; shared locations and non-demo data are preserved, and reset is blocked when `DEBUG=False`.
+
+Failed or abandoned:
+
+- Automatic scheduling of the cleanup command was not added because the free Render service has no existing job runner, and adding a public maintenance endpoint would require a separate authentication/secret decision.
+- The free Render PostgreSQL durability limit was not changed because that requires a hosting-plan decision, not a code-only change.
+
+Current status:
+
+- All 127 Django tests pass.
+- `manage.py check` reports no issues and `makemigrations --check --dry-run` reports no changes.
+- The runtime-hardening changes are included on the `deepseek-api` delivery branch.
+
+Next step:
+
+- Verify GitHub Actions and the Render redeploy; separately decide whether to add a scheduled cleanup runner and upgrade the production database.
+
+Technical decisions:
+
+- Keep liveness checks free of database/session access; do not use the product root for infrastructure pings.
+- Keep external moderation outside the row lock, then recheck mutable chat state inside a short transaction.
+- Retain product events longer than content-bearing AI logs, and keep both windows independent from anonymous identity cleanup.

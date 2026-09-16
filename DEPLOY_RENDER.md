@@ -89,7 +89,7 @@ SECURE_HSTS_PRELOAD=True
 
 After the first deploy completes:
 
-1. Open the `.onrender.com` URL.
+1. Open `/healthz/` and confirm it returns `ok`, then open the `.onrender.com` URL.
 2. Create a Plus One card from casual text.
 3. Open another browser or private window to simulate a second anonymous user.
 4. Swipe interested, open chat, send a safe message, and agree to meet.

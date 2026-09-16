@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseForbidden, JsonResponse
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -29,6 +29,11 @@ def _safe_next_redirect(request, target, fallback):
     ):
         return redirect(target)
     return redirect(fallback)
+
+
+def healthz(request):
+    """Lightweight liveness endpoint with no session or database access."""
+    return HttpResponse("ok", content_type="text/plain")
 
 
 def discover(request):
@@ -261,6 +266,8 @@ def chat(request, match_id):
             message, moderation = create_chat_message(match, request.user, text)
             if moderation.get("flagged"):
                 messages.error(request, f"Message blocked by safety check: {moderation.get('reason', 'Safety check triggered.')}")
+            elif moderation.get("unavailable"):
+                messages.error(request, "This chat closed before the message could be sent.")
             elif message:
                 return redirect("chat", match_id=match.id)
             return redirect("chat", match_id=match.id)
@@ -392,6 +399,8 @@ def chat_messages(request, match_id):
                 },
                 status=400,
             )
+        if moderation.get("unavailable") or message is None:
+            return JsonResponse({"ok": False, "error": "This chat is no longer active."}, status=409)
         return JsonResponse(
             {
                 "ok": True,

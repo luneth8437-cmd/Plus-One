@@ -1,23 +1,41 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
+from django.db.models import Q
 from django.utils import timezone
 
-from plusone.models import ActivityPost, CampusLocation, LLMLog, UserProfile
+from plusone.models import ActivityPost, CampusLocation, LLMLog, Match, ProductEvent, UserProfile
+
+
+DEMO_USERNAMES = ("demo_alex", "demo_blair")
 
 
 class Command(BaseCommand):
     help = "Seed demo users, campus locations, and activity posts for the Plus One MVP."
 
     def add_arguments(self, parser):
-        parser.add_argument("--reset", action="store_true", help="Delete demo posts and locations before seeding.")
+        parser.add_argument("--reset", action="store_true", help="Delete only demo users and their data before seeding.")
 
     def handle(self, *args, **options):
+        User = get_user_model()
         if options["reset"]:
-            ActivityPost.objects.all().delete()
-            CampusLocation.objects.all().delete()
-            LLMLog.objects.all().delete()
+            if not settings.DEBUG:
+                raise CommandError("seed_demo --reset is disabled when DEBUG=False.")
+            demo_users = User.objects.filter(username__in=DEMO_USERNAMES)
+            demo_user_ids = list(demo_users.values_list("id", flat=True))
+            demo_post_ids = list(ActivityPost.objects.filter(user_id__in=demo_user_ids).values_list("id", flat=True))
+            demo_match_ids = list(
+                Match.objects.filter(Q(poster_id__in=demo_user_ids) | Q(swiper_id__in=demo_user_ids)).values_list(
+                    "id", flat=True
+                )
+            )
+            ProductEvent.objects.filter(
+                Q(user_id__in=demo_user_ids) | Q(post_id__in=demo_post_ids) | Q(match_id__in=demo_match_ids)
+            ).delete()
+            LLMLog.objects.filter(user_id__in=demo_user_ids).delete()
+            demo_users.delete()
 
         locations = [
             ("North Dining Hall", CampusLocation.LocationType.DINING, "North Campus"),
@@ -28,13 +46,12 @@ class Command(BaseCommand):
         ]
         location_map = {}
         for name, location_type, area in locations:
-            location, _ = CampusLocation.objects.update_or_create(
+            location, _ = CampusLocation.objects.get_or_create(
                 name=name,
                 defaults={"location_type": location_type, "area": area},
             )
             location_map[name] = location
 
-        User = get_user_model()
         users = {
             "demo_alex": {
                 "display_name": "Alex Chen",

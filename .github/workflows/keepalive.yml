@@ -15,5 +15,5 @@ jobs:
     steps:
       - name: Ping the live app
         run: |
-          curl --silent --show-error --max-time 90 --output /dev/null \
-            https://plusone-ub3w.onrender.com/ || echo "Ping failed (instance may be redeploying)."
+          curl --fail --silent --show-error --max-time 90 --output /dev/null \
+            https://plusone-ub3w.onrender.com/healthz/ || echo "Ping failed (instance may be redeploying)."
