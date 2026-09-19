@@ -1904,3 +1904,27 @@ Verification:
 Status:
 
 - Frontend implementation and browser checks are complete locally. No website has been replaced or deployed, and no live visitor data was used.
+
+## 2026-09-19: Final Local Delivery Gate and Deployment Runbooks
+
+Final checks:
+
+- Full SQLite: 187 tests, 56.458s, passed with four PostgreSQL-only transaction tests intentionally skipped.
+- Full PostgreSQL 16: 187 tests, 58.238s, all passed. Migration compatibility and real concurrency are included.
+- Final JavaScript: 8/8 passed. Final SQLite Chromium flow passed in 14.8s; final PostgreSQL Chromium flow passed in 13.8s, including disconnection-warning recovery. Browser contexts were separate anonymous users, not two tabs sharing an identity.
+- Added cleanup regressions for an existing identity protected before a slow view and for a new report not resetting old terminal-evidence retention. Cleanup dry-run remains mutation-free.
+- `makemigrations --check --dry-run`: no changes. Dependency integrity: no broken requirements. Final whitespace/diff checks passed.
+- Independent deterministic AI benchmark: parsing 17/19 full cases; moderation 12/12; opening suggestions 9/9. Two pre-existing parsing benchmark issues remain: coffee/homework classified FOOD and the fixed 2026-07-20 case's rolling-year expected value. This benchmark is a reported result, not evidence that every AI scenario passed. Live provider calls were not tested.
+
+Delivery:
+
+- Local commits separate transactional backend (`eff7dbc`) and browser reliability (`b88b4a3`), followed by dependency/CI/deployment documentation and final retention checks.
+- Added pinned Python dependencies, PostgreSQL/SQLite CI matrix, Node regression and PostgreSQL browser steps, failure artifacts, and readiness monitoring that no longer masks failures. Remote CI has not run for these commits because this turn did not push.
+- Updated API contract, technical spec, test catalog, README, Render guide, compatibility rollout guide and a separate paid deployment checklist. Production matching remains gated off until deployment validation.
+- Stopped the temporary 8766 Django QA server and this turn's isolated PostgreSQL cluster after tests. No long-running test process or scheduled cleanup was left active. Temporary test files remain under system temp; no user database was deleted.
+
+Open boundaries:
+
+- Existing cards have a start time but no end time. Current cleanup protection is start+24h, which is not literally end+24h. Asked the user whether to add expected end time or accept start+24h; no answer at this gate. Production cleanup must stay disabled until this is settled.
+- Render account plan, expiry and deployed SHA remain unknown behind login. Production backup/restore, smoke test, dry-run and paid plan changes were not executed.
+- Local implementation and documented review gates are delivered; no GitHub push, production migration, automatic robot demo, paid purchase or production cleanup occurred in this turn.

@@ -11,9 +11,28 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [sqlite, postgresql]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: plusone_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     env:
-      DATABASE_URL: ""
+      DATABASE_URL: ${{ matrix.database == 'postgresql' && 'postgresql://postgres:postgres@127.0.0.1:5432/plusone_ci' || 'sqlite:////tmp/plusone-ci.sqlite3' }}
+      DJANGO_DEBUG: "True"
       ALLOWED_HOSTS: 127.0.0.1,localhost,testserver
       DEEPSEEK_API_KEY: ""
       OPENAI_API_KEY: ""
@@ -39,13 +58,35 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Django system check
-        run: python manage.py check
+        run: |
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+          python -m pip check
 
       - name: JavaScript syntax check
-        run: node --check plusone/static/plusone/app.js
+        run: |
+          npm ci
+          node --check plusone/static/plusone/app.js
+          npm run test:js
 
       - name: Django test suite
         run: python manage.py test --noinput
+
+      - name: Browser interaction tests
+        if: matrix.database == 'postgresql'
+        env:
+          PLUSONE_E2E_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/plusone_ci
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:browser
+
+      - name: Upload browser failure artifacts
+        if: failure() && matrix.database == 'postgresql'
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failure-artifacts
+          path: test-results/
+          if-no-files-found: ignore
 
       - name: AI benchmark (deterministic pipeline)
         run: |
@@ -56,5 +97,5 @@ jobs:
       - name: Upload AI benchmark report
         uses: actions/upload-artifact@v4
         with:
-          name: ai-eval-report
+          name: ai-eval-report-${{ matrix.database }}
           path: eval-report.md

@@ -27,9 +27,13 @@ services:
         value: "https://api.deepseek.com"
       - key: PLUSONE_LLM_MODEL
         value: "deepseek-v4-flash"
-      - key: PLUSONE_LLM_TIMEOUT_SECONDS
-        value: "15"
-      - key: PLUSONE_LLM_MAX_RETRIES
-        value: "1"
+      - key: PLUSONE_MODERATION_MODE
+        value: "external"
+      - key: PLUSONE_MODERATION_TIMEOUT_SECONDS
+        value: "5"
+      - key: PLUSONE_INTERACTIVE_TIMEOUT_SECONDS
+        value: "8"
+      - key: PLUSONE_NEW_MATCHES_ENABLED
+        value: "false"
       - key: WEB_CONCURRENCY
         value: "1"

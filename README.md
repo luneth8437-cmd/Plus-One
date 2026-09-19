@@ -62,7 +62,7 @@ Campus plans often fail because students do not know who is free right now, who 
 - Time-limited campus activity cards created from structured fields or casual text.
 - Discovery filters, swipe actions, instant matches, and five-minute private chats with lightweight polling.
 - Meet handoff after both people agree, with place, time, and a short safety reminder.
-- AI-assisted post parsing, icebreakers, and safety moderation with deterministic fallback.
+- AI-assisted post parsing and suggestions with deterministic fallback; production safety moderation fails closed when unavailable.
 - Dashboard for active, matched, expired, and cancelled plans.
 
 ## Product Validation
@@ -132,7 +132,7 @@ Open:
 http://127.0.0.1:8000/
 ```
 
-No registration is required. The first visit creates a temporary anonymous session identity and opens Discover. The session remains available in that browser until cookies/session data are cleared or the user starts fresh.
+No registration is required. The first visit creates a temporary anonymous session identity and opens Discover. The session remains available in that browser until cookies/session data are cleared or the user starts fresh. For local development without an AI key, explicitly set `DJANGO_DEBUG=True` and `PLUSONE_MODERATION_MODE=rules` before starting the server. Rules-only moderation is rejected in production.
 
 For an optional local sample dataset, run
 `.venv/bin/python manage.py seed_demo` after the migration.
@@ -154,8 +154,9 @@ Set the key in your shell before running Django:
 export DEEPSEEK_API_KEY="your_deepseek_api_key"
 export DEEPSEEK_BASE_URL="https://api.deepseek.com"
 export PLUSONE_LLM_MODEL="deepseek-v4-flash"
-export PLUSONE_LLM_TIMEOUT_SECONDS="15"
-export PLUSONE_LLM_MAX_RETRIES="1"
+export PLUSONE_MODERATION_MODE="external"
+export PLUSONE_MODERATION_TIMEOUT_SECONDS="5"
+export PLUSONE_INTERACTIVE_TIMEOUT_SECONDS="8"
 ```
 
 Do not commit API keys. If you prefer a local `.env` file, keep it untracked and load it before starting Django:
@@ -166,7 +167,9 @@ source .env
 set +a
 ```
 
-If `DEEPSEEK_API_KEY` is not set but `OPENAI_API_KEY` is set, the app uses OpenAI. If no API key is set, the app automatically uses deterministic rule-based fallback. All AI and fallback calls are stored in `LLMLog`.
+If `DEEPSEEK_API_KEY` is not set but `OPENAI_API_KEY` is set, the app uses OpenAI. Parsing and optional suggestions can fall back to rules. Content moderation cannot: missing credentials, invalid responses, or a five-second timeout return a temporary-unavailable response and preserve input without publishing/sending. Interactive AI calls have no automatic retries. AI and fallback calls are stored in `LLMLog`.
+
+New matches wait up to ten minutes, bounded by card expiry. Both chat pages must send recent foreground signals before the fixed five-minute chat starts. The opening message is immediate and rule-based; additional AI suggestions are user-initiated. See the [optimization delivery and rollout guide](docs/engineering/optimization_delivery_2026-09-19.md) for request IDs, cleanup protections, and the production rollout gate.
 
 Run the retention command as a dry run before deleting stale data. The three
 record types use independent defaults: anonymous identities 7 days, AI logs

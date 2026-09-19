@@ -53,7 +53,7 @@ def _is_background_request(request):
 
 
 def record_last_seen(request, *, now=None):
-    """Record a genuine page/action after its view has finished.
+    """Record a genuine page/action, before and after its view as needed.
 
     The user row is the cleanup coordination lock. This function deliberately
     does not create a user or profile; anonymous identity creation belongs to

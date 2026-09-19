@@ -1,7 +1,1 @@
-Django==5.2.14
-dj-database-url
-gunicorn
-openai==1.109.1
-psycopg2-binary
-uvicorn
-whitenoise[brotli]
+-r requirements.lock

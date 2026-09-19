@@ -1,7 +1,7 @@
 # API Contract
 
 All routes are server-rendered Django views unless marked JSON. Anonymous
-session identity is created on first visit; every route below assumes it.
+session identity is created on normal entry pages, never by health/readiness or session-update polling.
 CSRF token required on all POSTs.
 
 ## Pages and Actions
@@ -12,7 +12,7 @@ CSRF token required on all POSTs.
 | `/discover/` | GET | Queue of active cards. Query: `activity_type`, `location` (id), `time_window` (`now`/`today`), `matched` (match id -> match modal) | HTML |
 | `/create/` | GET | Create form | HTML |
 | `/create/` | POST `action=assist` | `raw_text` -> moderated, AI-parsed draft with `validation` warnings | HTML (form initial + warnings) |
-| `/create/` | POST `action=publish` | Form fields + hidden `raw_text`, optional `confirm_date=yes`. Blocked once when text date conflicts with `start_time` | 302 to post detail, or HTML with blocker |
+| `/create/` | POST `action=publish` | UUID `request_id`, form fields, `raw_text` (max 2,000), optional `confirm_date=yes`; final description max 2,000 | 302 to detail; HTML preserving input on failure |
 | `/posts/<id>/` | GET | Card detail | HTML |
 | `/posts/<id>/edit/` | GET/POST | Owner-only edit / cancel | HTML / 302 |
 | `/posts/<id>/swipe/` | POST | `action=interested\|pass`. Outcomes: match_created, match_exists, passed, own_post, full_post, inactive_post, try_again | 302 (Discover with `matched=<id>` on match) |
@@ -25,19 +25,28 @@ CSRF token required on all POSTs.
 | Route | Method | Purpose / Parameters | Response |
 | --- | --- | --- | --- |
 | `/chat/<match_id>/` | GET | Chat page (participants only, else 403) | HTML |
-| `/chat/<match_id>/` | POST `action=send` | `message` (<=500 chars, moderated; unsafe not persisted) | 302 |
+| `/chat/<match_id>/` | POST `action=send` | UUID `request_id`, `message` (<=500 chars, moderated) | 302 or bound form with error |
 | `/chat/<match_id>/` | POST `action=agree` | Record agreement; both sides -> AGREED + handoff | 302 |
-| `/chat/<match_id>/` | POST `action=decline\|report` | Close match with reason; system message appended | 302 |
+| `/chat/<match_id>/` | POST `action=decline` | End WAITING/CHATTING, release eligible card | 302 |
+| `/chat/<match_id>/` | POST `action=report` | `category`: other/contact/harassment/unsafe_meeting; `reason` <=500; every phase allowed | 302; 400 invalid; 410 supplementation window expired |
 | `/chat/<match_id>/` | POST `action=suggest_openers` | AI suggestions (first-message or reply mode); never persisted, never auto-sent | HTML with suggestion cards |
-| `/chat/<match_id>/messages/` | GET (JSON) | Poll: `after` (message id). Returns `{ok, messages[], chat_status, chat_active}` | JSON |
-| `/chat/<match_id>/messages/` | POST (JSON) | Async send: `message`. 400 with `{flagged, warning}` when moderated; 409 when chat closed | JSON |
+| `/chat/<match_id>/messages/` | GET (JSON) | Poll: nonnegative `after`; returns messages, next_cursor, server_time, phase, phase_deadline, viewer_agreed, other_agreed, viewer_present, other_present; retains chat_status/chat_active | JSON |
+| `/chat/<match_id>/messages/` | POST (JSON) | UUID `request_id`, `message`; returns original on same-ID/same-content replay, even after close | 200; 400 invalid/unsafe; 409 conflict/closed; 429 limited; 503 moderation unavailable |
+| `/chat/<match_id>/presence/` | POST (JSON) | `visible=true\|false`, participants only; visible signals expire after 15 seconds | Current phase and state flags |
+| `/session/updates/` | GET (JSON) | No identity creation; current identity's matches only | authenticated, matches[{id,url,status,title}], open_count, waiting_count, server_time |
+| `/healthz/` | GET | Process liveness; no DB/session access | 200 text |
+| `/readyz/` | GET | Database SELECT 1 only; no identity creation | 200 or 503 text |
 | `/chat/<match_id>/opener-click/` | POST (JSON) | Analytics only: `index` of clicked suggestion | `{ok: true}` |
 
 ## Invariants
 
 - Participants-only: every chat route checks `match.is_participant(user)`.
 - One match per (post, swiper); post owner cannot swipe own post.
-- Chat writes are refused (409/redirect) once status leaves CHATTING.
+- New messages are refused once status leaves CHATTING. Successful UUID replays still return the original message. Missing/invalid IDs explicitly require refresh; changed content under the same ID returns 409.
+- New matches WAITING for at most 10 minutes, bounded by card expiry. Only two recent foreground presence signals activate one five-minute clock; GET never marks arrival. WAITING and CHATTING hold capacity; terminal matches never restart.
+- All message writes and phase changes take user locks in ascending order, then card, then match. Poll snapshots take the same lock. Clients advance the cursor from polling only, not from POST acknowledgements.
+- Limits are shared database fixed windows: AI draft/suggestions 6/min, publish/edit 10/hour, messages 30/min. Retry-After accompanies 429. Successful request replays do not consume quota; same UUID attempts are deduplicated within a bucket.
 - Moderation-blocked content is never persisted; the moderation decision is
   logged to `LLMLog`.
-- Demo-mode writes never emit `ProductEvent` rows.
+- External moderation unavailable => 503 and no publication/message write. Rules mode requires explicit configuration and DEBUG=True. No production auto-demo exists.
+- Reports are unique per participant/match; resubmitting a resolved report returns it to pending and retains handling notes. The original 90-day retention clock is not extended; after that, supplementation is explicitly rejected.

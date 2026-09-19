@@ -10,9 +10,9 @@ Browser (Django templates + vanilla JS polling)
   -> Django 5 views (request routing only)
     -> services/   (state transitions: matching, chat, identity, analytics)
     -> selectors/  (read-side query composition)
-    -> ai_services/ (parse / moderate / openers, each with deterministic fallback)
-  -> PostgreSQL (prod) / SQLite (dev, CI)
-  -> DeepSeek API (OpenAI-compatible; optional at runtime)
+    -> ai_services/ (parse/openers may fall back; production moderation fails closed)
+  -> PostgreSQL (prod, CI) / SQLite (dev, CI)
+  -> DeepSeek API (OpenAI-compatible; required for production content writes)
 ```
 
 Deployment: Render web service (Gunicorn+Uvicorn, WhiteNoise static),
@@ -25,12 +25,12 @@ lives server-side only.
 | --- | --- |
 | Anonymous cookie-session identity, no accounts | Removes signup friction for an MVP whose core promise is disposable identity; verified-student mode is a launch precondition, not an MVP feature |
 | Services own writes, views never touch ORM state directly | State transitions (swipe->match, agree->handoff) need locking and event logging in exactly one place |
-| Every AI call has a deterministic fallback that also acts as a guardrail | Measured: fallback parses activity type at 95% vs LLM 89%, at ~0ms vs 1.6s; the product must degrade to "slightly less smart", never to "broken" |
+| Draft assistance may fall back; moderation never silently falls back in production | Unavailable moderation preserves input but postpones writing; browsing, exit and reporting remain available |
 | AI drafts, human confirms, AI never auto-publishes/auto-sends | Usability evidence (U6): filled-but-wrong AI fields are trusted more than empty ones, so silent AI errors are the highest-risk failure |
 | Server-side analytics events at the state-change site | Client loss cannot skew the funnel; chat text is never stored in events |
-| Five-minute chat TTL with row-level locking on match creation | Concurrency-safe one-to-one promise (unique (post, swiper), select_for_update, sqlite lock retry) |
+| Ten-minute bounded waiting, then one five-minute chat | Foreground presence activates once; consistent user/card/match lock order protects state, capacity and message cursors |
 
-## Data Model (7 tables)
+## Data Model
 
 - `UserProfile` - display name, interests, campus area (profile fields are
   treated as untrusted input to AI prompts).
@@ -38,12 +38,15 @@ lives server-side only.
 - `ActivityPost` - temporary card; status ACTIVE/MATCHED/EXPIRED/CANCELLED,
   `expire_time` TTL, capacity fixed to 1.
 - `Swipe` - unique (user, post) with interested/pass action.
-- `Match` - unique (post, swiper); CHATTING/AGREED/DECLINED/EXPIRED,
-  five-minute `chat_expires_at`, two agreed flags.
+- `Match` - unique (post, swiper); WAITING/CHATTING/AGREED/DECLINED/EXPIRED,
+  waiting deadline, foreground timestamps, one-time start/deadline and consent flags.
 - `ChatMessage` - messages incl. system rows (icebreaker, close notices).
 - `LLMLog` - audit of every AI call and fallback: task type, strategy
   (includes prompt version), latency, success.
 - `ProductEvent` - server-side analytics (see `04_analytics_event_plan.md`).
+- `SafetyReport` - unique participant/match statement, processing state and notes.
+- `RateLimitBucket` - database-coordinated user/scope/window counts and bounded UUID reservations.
+- User profiles retain nullable last_seen_at / retired_at; post/message UUIDs are nullable only for historical compatibility.
 
 ## AI Pipeline Layers
 
@@ -51,8 +54,7 @@ lives server-side only.
    date-aware rule parser; `validate_draft` guardrails (explicit-date
    cross-check, expiry clamp, missing-field warnings); publish blocked on
    date conflict until confirmed.
-2. **Moderation** (`ai_services/moderation.py`): keyword rules are a hard
-   floor, LLM verdicts can only add flags, never remove them.
+2. **Moderation** (`ai_services/moderation.py`): production requires a valid external decision within five seconds; error/timeout/malformed result blocks writing. Explicit rules mode exists only for DEBUG development and deterministic tests; boundary-aware rules also validate suggestions.
 3. **Opening assistant** (`ai_services/opening_assistant.py`): gather context
    (identity-stripped, injection-sanitized) -> LLM generation (prompt v2,
    student tone, reply mode with session-scoped memory) -> per-item
@@ -64,6 +66,10 @@ Evaluation for all three layers lives in `eval_cases.py` + `evaluate_ai`
 LLM-as-judge with human calibration via `calibrate_judge`).
 
 ## Non-Functional Notes
+
+Current acceptance and rollout rules: `optimization_delivery_2026-09-19.md`.
+The latency/cost figures below are historical evaluation observations, not
+measured performance of this revised release.
 
 - Latency budget: page actions < 200ms without AI; AI-assisted actions show
   results in one round-trip (parse ~1.6s p95 2.1s measured).

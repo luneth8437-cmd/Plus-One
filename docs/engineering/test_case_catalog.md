@@ -1,6 +1,6 @@
 # Test Case Catalog
 
-118 automated tests run on every push (`.github/workflows/ci.yml`), plus a
+Automated tests run against SQLite and PostgreSQL on every push (`.github/workflows/ci.yml`), plus a
 non-test benchmark suite (`evaluate_ai`) whose report uploads as a CI
 artifact. Philosophy: every bug found by usability testing or by the
 benchmark becomes a permanent regression test.
@@ -23,7 +23,18 @@ benchmark becomes a permanent regression test.
 - Lifecycle: chat writes after decline/expire refused; identity reset closes
   live cards and chats; countdown renders a labeled state, never "--".
 - Adversarial: prompt injection via interests/major fields; personal-info
-  probes in LLM output; moderation rules as un-overridable floor.
+  probes in LLM output; explicit debug-only rules and production moderation fail-closed behavior.
+
+## Reliability regression suites (September 2026)
+
+- `tests_reliability.py`: waiting/foreground activation/expiry; terminal replay; UUID conflicts; reset fencing; edit-versus-match; reports after agreement; shared quota; server-time/cursor/consent payloads; total AI deadline cancellation. PostgreSQL-only tests exercise real competing transactions.
+- `tests_retention.py`: last-seen throttling, background exclusions, live/future/+24h and unresolved-report protection, report/evidence cap, bounded identity batches, dry-run and repeatability.
+- `tests_ai_safety.py`: mocked unavailable/malformed/timeout providers; no production rules fallback; word boundaries and Chinese/English contact cases; budgets and no SDK retries.
+- `tests_migrations.py`: real 0009-to-latest migration with old rows, unchanged chat deadlines, nullable compatibility fields and evidence-based attribution recovery.
+- `tests/js/`: cursor isolation, sorting/deduplication, single in-flight polling and retry behavior.
+- `tests/browser/`: real isolated browser contexts, waiting-to-chat activation, cross-client messages, weak-network retry, agreement/report and responsive keyboard checks.
+
+The older suite counts above are historical inventory, not acceptance criteria. Current execution results are in `docs/project_progress_log.md`. Production data is never used as a test fixture.
 
 ## Beyond Unit Tests
 

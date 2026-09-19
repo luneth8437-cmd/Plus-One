@@ -100,6 +100,9 @@ class LastSeenMiddlewareTests(RetentionFixtureMixin, TestCase):
             self.request_for("/chat/123/messages/"),
             self.request_for("/chat/123/opener-click/", method="post"),
             self.request_for("/healthz/"),
+            self.request_for("/readyz/"),
+            self.request_for("/session/updates/"),
+            self.request_for("/chat/123/presence/", method="post"),
         ]
 
         for request in requests:
@@ -107,6 +110,15 @@ class LastSeenMiddlewareTests(RetentionFixtureMixin, TestCase):
 
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.last_seen_at, old_value)
+
+    def test_existing_identity_is_protected_before_slow_view_starts(self):
+        request = self.request_for("/discover/")
+        middleware = LastSeenMiddleware(lambda req: HttpResponse("ok"))
+        middleware.process_view(request, None, (), {})
+        self.profile.refresh_from_db()
+        self.assertGreater(self.profile.last_seen_at, self.now - timedelta(minutes=1))
+        self.assertEqual(cleanup_anonymous_users(dry_run=False), 0)
+        self.assertTrue(get_user_model().objects.filter(pk=self.user.pk).exists())
 
     def test_middleware_records_user_created_by_view_without_creating_accounts_itself(self):
         request = self.factory.get("/discover/")
@@ -208,6 +220,26 @@ class AnonymousIdentityRetentionTests(RetentionFixtureMixin, TestCase):
 
 
 class IndependentRecordRetentionTests(RetentionFixtureMixin, TestCase):
+    def test_new_report_does_not_extend_old_terminal_evidence_retention(self):
+        reporter, _ = self.make_user("anon_new_reporter")
+        participant, _ = self.make_user("anon_new_participant")
+        post = self.make_post(reporter)
+        match = Match.objects.create(
+            post=post, poster=reporter, swiper=participant, status=Match.Status.DECLINED,
+        )
+        report = SafetyReport.objects.create(match=match, reporter=reporter, reason="New report")
+        message = ChatMessage.objects.create(match=match, sender=participant, message="Old evidence")
+        ChatMessage.objects.filter(pk=message.pk).update(created_at=self.now - timedelta(days=91))
+
+        self.assertEqual(cleanup_stale_records(dry_run=True)["report_messages"], 1)
+        self.assertTrue(ChatMessage.objects.filter(pk=message.pk).exists())
+        counts = cleanup_stale_records(dry_run=False)
+        self.assertEqual(counts["report_messages"], 1)
+        self.assertFalse(ChatMessage.objects.filter(pk=message.pk).exists())
+        self.assertTrue(SafetyReport.objects.filter(pk=report.pk).exists())
+        self.assertEqual(get_user_model().objects.filter(pk__in=[reporter.pk, participant.pk]).count(), 2)
+        self.assertEqual(cleanup_stale_records(dry_run=False)["report_messages"], 0)
+
     def test_terminal_match_messages_are_purged_after_evidence_window(self):
         reporter, _ = self.make_user("terminal_reporter", stale=False)
         participant, _ = self.make_user("terminal_participant", stale=False)
