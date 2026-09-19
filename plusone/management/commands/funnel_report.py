@@ -27,37 +27,38 @@ from plusone.models import Match, ProductEvent
 def _count(name, since):
     qs = ProductEvent.objects.filter(name=name)
     if since:
-        qs = qs.filter(created_at__gte=since)
+        qs = qs.filter(post_created_at__gte=since)
     return qs.count()
 
 
 def _distinct_matches(name, since):
-    qs = ProductEvent.objects.filter(name=name, match__isnull=False)
+    qs = ProductEvent.objects.filter(name=name, match_reference__isnull=False)
     if since:
-        qs = qs.filter(created_at__gte=since)
-    return qs.values("match").distinct().count()
+        qs = qs.filter(post_created_at__gte=since)
+    return qs.order_by().values("match_reference").distinct().count()
 
 
 def build_report(days=None):
     since = timezone.now() - timedelta(days=days) if days else None
 
-    published = _count(ProductEvent.Name.PUBLISH_CARD, since)
-    matches = _count(ProductEvent.Name.MATCH_CREATED, since)
+    cohort = ProductEvent.objects.filter(post_reference__isnull=False)
+    if since:
+        cohort = cohort.filter(post_created_at__gte=since)
+    published = cohort.filter(name=ProductEvent.Name.PUBLISH_CARD).order_by().values("post_reference").distinct().count()
+    matched_cards = cohort.filter(name=ProductEvent.Name.MATCH_CREATED).order_by().values("post_reference").distinct().count()
+    matches = _distinct_matches(ProductEvent.Name.MATCH_CREATED, since)
     first_messages = _distinct_matches(ProductEvent.Name.FIRST_MESSAGE_SENT, since)
     first_replies = _distinct_matches(ProductEvent.Name.FIRST_REPLY_RECEIVED, since)
     agree_matches = _distinct_matches(ProductEvent.Name.AGREE_CLICKED, since)
 
-    agreed_qs = Match.objects.filter(status=Match.Status.AGREED)
-    if since:
-        agreed_qs = agreed_qs.filter(created_at__gte=since)
-    both_agreed = agreed_qs.count()
+    both_agreed = _distinct_matches(ProductEvent.Name.BOTH_AGREED, since)
     meetups = _distinct_matches(ProductEvent.Name.MEETUP_CONFIRMED, since)
 
     opener_sessions = _count(ProductEvent.Name.OPENER_SUGGESTED, since)
     opener_clicks = _count(ProductEvent.Name.OPENER_CLICKED, since)
     first_msg_qs = ProductEvent.objects.filter(name=ProductEvent.Name.FIRST_MESSAGE_SENT)
     if since:
-        first_msg_qs = first_msg_qs.filter(created_at__gte=since)
+        first_msg_qs = first_msg_qs.filter(post_created_at__gte=since)
     first_msg_events = list(first_msg_qs.values_list("properties", flat=True))
     used = sum(1 for p in first_msg_events if p.get("opener_usage") in ("verbatim", "edited"))
     verbatim = sum(1 for p in first_msg_events if p.get("opener_usage") == "verbatim")
@@ -67,9 +68,14 @@ def build_report(days=None):
 
     return {
         "window_days": days,
+        "window_basis": "activity creation cohort; subsequent events within retained history",
+        "unattributed_events": ProductEvent.objects.filter(post_reference__isnull=True).count(),
+        "legacy_agreements_without_agreement_event": Match.objects.filter(status=Match.Status.AGREED).exclude(pk__in=ProductEvent.objects.filter(name=ProductEvent.Name.BOTH_AGREED, match_reference__isnull=False).values("match_reference")).count(),
         "funnel": {
             "publish_card": published,
+            "matched_cards": matched_cards,
             "match_created": matches,
+            "chat_started": _distinct_matches(ProductEvent.Name.CHAT_STARTED, since),
             "matches_with_first_message": first_messages,
             "matches_with_first_reply": first_replies,
             "matches_with_agree": agree_matches,
@@ -77,7 +83,7 @@ def build_report(days=None):
             "matches_with_meetup_confirmed": meetups,
         },
         "conversion": {
-            "publish_to_match_pct": rate(matches, published),
+            "publish_to_match_pct": rate(matched_cards, published),
             "match_to_first_message_pct": rate(first_messages, matches),
             "first_message_to_reply_pct": rate(first_replies, first_messages),
             "match_to_both_agreed_pct": rate(both_agreed, matches),

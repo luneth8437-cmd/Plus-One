@@ -3,21 +3,23 @@ import os
 from datetime import timedelta
 from io import StringIO
 from unittest.mock import patch
+from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.db import OperationalError
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from .ai import moderate_text, parse_activity_text, suggest_ambiguous_time_options
-from .models import ActivityPost, CampusLocation, ChatMessage, LLMLog, Match, Swipe, UserProfile
+from .models import ActivityPost, CampusLocation, ChatMessage, LLMLog, Match, SafetyReport, Swipe, UserProfile
 from .presenters import post_initial_from_ai
 from .services.expiration import refresh_expired_records
 
 
+@override_settings(DEBUG=True, PLUSONE_MODERATION_MODE="rules")
 class PlusOneTestCase(TestCase):
     def setUp(self):
         self.llm_env = patch.dict(os.environ, {"DEEPSEEK_API_KEY": "", "OPENAI_API_KEY": ""})
@@ -60,6 +62,7 @@ class PlusOneTestCase(TestCase):
             reverse("create_post"),
             {
                 "action": "publish",
+                "request_id": str(uuid4()),
                 "title": "Study sprint",
                 "description": "Focused session.",
                 "activity_type": ActivityPost.ActivityType.STUDY,
@@ -77,6 +80,7 @@ class PlusOneTestCase(TestCase):
             reverse("create_post"),
             {
                 "action": "publish",
+                "request_id": str(uuid4()),
                 "title": "Study sprint",
                 "description": "Focused session.",
                 "activity_type": ActivityPost.ActivityType.STUDY,
@@ -100,6 +104,7 @@ class PlusOneTestCase(TestCase):
             reverse("create_post"),
             {
                 "action": "publish",
+                "request_id": str(uuid4()),
                 "title": "Preview card",
                 "description": "Check preview formatting.",
                 "activity_type": ActivityPost.ActivityType.STUDY,
@@ -133,6 +138,7 @@ class PlusOneTestCase(TestCase):
             reverse("create_post"),
             {
                 "action": "publish",
+                "request_id": str(uuid4()),
                 "title": "Bring a weapon to the game",
                 "description": "unsafe product text",
                 "activity_type": ActivityPost.ActivityType.SPORTS,
@@ -231,7 +237,8 @@ class PlusOneTestCase(TestCase):
         self.assertContains(response, "Your filters may be hiding live plans.")
         self.assertContains(response, "Clear filters")
 
-    def test_rule_guardrail_flags_when_llm_misses_unsafe_text(self):
+    @override_settings(DEBUG=False, PLUSONE_MODERATION_MODE="external")
+    def test_external_provider_decision_is_not_merged_with_debug_rules(self):
         raw_response = json.dumps(
             {
                 "flagged": False,
@@ -255,9 +262,9 @@ class PlusOneTestCase(TestCase):
         ):
             result = moderate_text(self.poster, "Bring a weapon to the game")
 
-        self.assertTrue(result["flagged"])
-        self.assertIn("weapon", result["categories"])
-        self.assertTrue(LLMLog.objects.filter(task_type=LLMLog.TaskType.MODERATION, strategy="deepseek", output_json__flagged=True).exists())
+        self.assertFalse(result["flagged"])
+        self.assertFalse(result["service_unavailable"])
+        self.assertTrue(LLMLog.objects.filter(task_type=LLMLog.TaskType.MODERATION, strategy="deepseek", output_json__flagged=False).exists())
 
     def test_owner_can_edit_active_post(self):
         self.client.force_login(self.poster)
@@ -402,6 +409,7 @@ class PlusOneTestCase(TestCase):
             reverse("create_post"),
             {
                 "action": "publish",
+                "request_id": str(uuid4()),
                 "title": "Anonymous coffee",
                 "description": "Quick coffee before class.",
                 "activity_type": ActivityPost.ActivityType.FOOD,
@@ -529,8 +537,9 @@ class PlusOneTestCase(TestCase):
         response = self.client.post(reverse("swipe_post", args=[self.post.id]), {"action": Swipe.Action.INTERESTED})
         self.assertEqual(response.status_code, 302)
         self.assertIn("?matched=", response["Location"])
-        self.assertTrue(Match.objects.filter(post=self.post, swiper=self.swiper).exists())
-        self.assertTrue(ChatMessage.objects.filter(is_system=True).exists())
+        match = Match.objects.get(post=self.post, swiper=self.swiper)
+        self.assertEqual(match.status, Match.Status.WAITING)
+        self.assertFalse(ChatMessage.objects.filter(match=match).exists())
 
     def test_matched_post_does_not_create_second_match(self):
         other = get_user_model().objects.create_user(username="other", password="pass")
@@ -668,9 +677,12 @@ class PlusOneTestCase(TestCase):
             chat_expires_at=timezone.now() - timedelta(seconds=1),
         )
         self.client.force_login(self.swiper)
-        response = self.client.post(reverse("chat", args=[match.id]), {"action": "send", "message": "Still there?"})
+        response = self.client.post(
+            reverse("chat", args=[match.id]),
+            {"action": "send", "message": "Still there?", "request_id": str(uuid4())},
+        )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 409)
         self.assertFalse(ChatMessage.objects.filter(match=match, sender=self.swiper).exists())
 
     def test_chat_message_moderation_blocks_unsafe_message(self):
@@ -681,9 +693,13 @@ class PlusOneTestCase(TestCase):
             chat_expires_at=timezone.now() + timedelta(minutes=5),
         )
         self.client.force_login(self.swiper)
-        response = self.client.post(reverse("chat", args=[match.id]), {"action": "send", "message": "Here is my phone number"})
+        response = self.client.post(
+            reverse("chat", args=[match.id]),
+            {"action": "send", "message": "My phone number is 13812345678", "request_id": str(uuid4())},
+        )
 
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Message blocked by safety check")
         self.assertFalse(ChatMessage.objects.filter(match=match, sender=self.swiper).exists())
         self.assertTrue(LLMLog.objects.filter(task_type=LLMLog.TaskType.MODERATION, output_json__flagged=True).exists())
 
@@ -718,7 +734,7 @@ class PlusOneTestCase(TestCase):
         self.assertEqual(match.status, Match.Status.CHATTING)
         self.assertTrue(match.swiper_agreed)
         self.assertContains(response, "You agreed. Waiting for the other person.")
-        self.assertNotContains(response, "You both agreed to meet.")
+        self.assertContains(response, "data-handoff-card hidden")
 
     def test_chat_page_shows_decision_guidance_and_quick_replies(self):
         match = Match.objects.create(
@@ -762,7 +778,8 @@ class PlusOneTestCase(TestCase):
         self.assertContains(response, "Meet in a public place.")
         self.assertContains(response, "Leave or report if anything feels off.")
         self.assertContains(response, "Back to Dashboard")
-        self.assertNotContains(response, "Type fast... this chat expires soon.")
+        self.assertNotContains(response, "data-chat-compose")
+        self.assertContains(response, 'data-chat-action="agree" disabled')
 
     def test_agreed_match_does_not_accept_new_message(self):
         match = Match.objects.create(
@@ -776,9 +793,12 @@ class PlusOneTestCase(TestCase):
         )
 
         self.client.force_login(self.swiper)
-        response = self.client.post(reverse("chat", args=[match.id]), {"action": "send", "message": "After agree"})
+        response = self.client.post(
+            reverse("chat", args=[match.id]),
+            {"action": "send", "message": "After agree", "request_id": str(uuid4())},
+        )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 409)
         self.assertFalse(ChatMessage.objects.filter(match=match, message="After agree").exists())
 
     def test_decline_closes_chat_and_reopens_capacity(self):
@@ -801,7 +821,7 @@ class PlusOneTestCase(TestCase):
         self.assertEqual(match.close_reason, Match.CloseReason.DECLINED)
         self.assertEqual(self.post.status, ActivityPost.Status.ACTIVE)
         self.assertContains(response, "This chat was closed by a participant.")
-        self.assertTrue(ChatMessage.objects.filter(match=match, is_system=True, message__icontains="declined").exists())
+        self.assertTrue(ChatMessage.objects.filter(match=match, is_system=True, message__icontains="has ended").exists())
 
     def test_report_closes_chat_and_records_reason(self):
         match = Match.objects.create(
@@ -819,7 +839,8 @@ class PlusOneTestCase(TestCase):
         self.assertEqual(match.status, Match.Status.DECLINED)
         self.assertEqual(match.close_reason, Match.CloseReason.REPORTED)
         self.assertEqual(match.closed_by, self.swiper)
-        self.assertTrue(ChatMessage.objects.filter(match=match, is_system=True, message__icontains="Safety report").exists())
+        self.assertTrue(SafetyReport.objects.filter(match=match, reporter=self.swiper).exists())
+        self.assertTrue(ChatMessage.objects.filter(match=match, is_system=True, message__icontains="has ended").exists())
 
     def test_chat_messages_endpoint_returns_messages_after_id(self):
         match = Match.objects.create(
@@ -867,7 +888,10 @@ class PlusOneTestCase(TestCase):
         )
 
         self.client.force_login(self.swiper)
-        response = self.client.post(reverse("chat_messages", args=[match.id]), {"message": "See you there"})
+        response = self.client.post(
+            reverse("chat_messages", args=[match.id]),
+            {"message": "See you there", "request_id": str(uuid4())},
+        )
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -885,7 +909,10 @@ class PlusOneTestCase(TestCase):
         )
 
         self.client.force_login(self.swiper)
-        response = self.client.post(reverse("chat_messages", args=[match.id]), {"message": "Bring a weapon to the game"})
+        response = self.client.post(
+            reverse("chat_messages", args=[match.id]),
+            {"message": "Bring a weapon to the game", "request_id": str(uuid4())},
+        )
 
         self.assertEqual(response.status_code, 400)
         data = response.json()

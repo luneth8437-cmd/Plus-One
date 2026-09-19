@@ -1,4 +1,10 @@
+from uuid import uuid4
+
 from django.contrib import messages
+from django.db import connection, DatabaseError
+from django.db.models import Q
+from django.utils import timezone
+from django.views.decorators.http import require_POST, require_GET
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -11,11 +17,13 @@ from .models import ActivityPost, Match, ProductEvent, Swipe
 from .services.analytics import log_event
 from .presenters import chat_message_payload, post_edit_initial, post_form_preview, post_initial_from_ai
 from .selectors import dashboard_context_for_user, discover_context_for_user
-from .services.chat import close_match, create_chat_message, record_agreement
+from .services.chat import close_match, create_chat_message, record_agreement, report_match, confirm_meetup
+from .services.lifecycle import locked_match, expire_locked, phase_payload, set_presence
+from .services.requests import RequestError, consume_limit
 from .services.expiration import refresh_expired_records
 from .services.identity import ensure_anonymous_session, ensure_user_profile, reset_anonymous_identity_for_request
 from .services.matching import SwipeOutcome, handle_swipe
-from .services.posts import cancel_activity_post, moderate_activity_form, moderate_activity_text, save_activity_post_for_user
+from .services.posts import cancel_activity_post, moderate_activity_form, moderate_activity_text, save_activity_post_for_user, published_replay, publish_fingerprint
 from .ai_services.validation import check_publish_date
 
 
@@ -34,6 +42,24 @@ def _safe_next_redirect(request, target, fallback):
 def healthz(request):
     """Lightweight liveness endpoint with no session or database access."""
     return HttpResponse("ok", content_type="text/plain")
+
+
+def readyz(request):
+    """Readiness deliberately checks only the database, never AI or sessions."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except DatabaseError:
+        return HttpResponse("database unavailable", status=503, content_type="text/plain")
+    return HttpResponse("ready", content_type="text/plain")
+
+
+def _json_request_error(error):
+    response = JsonResponse({"ok": False, "error": str(error), "retry_after": error.retry_after}, status=error.status)
+    if error.retry_after:
+        response["Retry-After"] = str(error.retry_after)
+    return response
 
 
 def discover(request):
@@ -90,6 +116,9 @@ def create_post(request):
     draft_check = None
     date_confirm_message = None
     raw_text = ""
+    request_id = request.POST.get("request_id") or str(uuid4())
+    response_status = 200
+    retry_after = None
 
     if request.method == "POST" and request.POST.get("action") == "assist":
         # Assist is a draft-only path: unsafe input is blocked before parsing,
@@ -97,8 +126,16 @@ def create_post(request):
         assist_form = ActivityAssistForm(request.POST)
         if assist_form.is_valid():
             raw_text = assist_form.cleaned_data["raw_text"]
-            moderation = moderate_activity_text(request.user, raw_text)
-            if moderation.get("flagged"):
+            try:
+                consume_limit(request.user, "ai")
+                moderation = moderate_activity_text(request.user, raw_text)
+            except RequestError as error:
+                moderation = {"service_unavailable": True, "reason": str(error)}
+                response_status, retry_after = error.status, error.retry_after
+            if moderation.get("service_unavailable"):
+                response_status = response_status if response_status != 200 else 503
+                messages.error(request, moderation.get("reason", "Safety checking is temporarily unavailable. Your input has been kept."))
+            elif moderation.get("flagged"):
                 messages.error(request, f"Safety check flagged this request: {moderation.get('reason', 'Please revise it.')}")
             else:
                 parsed = parse_activity_text(request.user, raw_text)
@@ -116,13 +153,32 @@ def create_post(request):
         post_form = ActivityPostForm(request.POST)
         raw_text = request.POST.get("raw_text", "")
         assist_form = ActivityAssistForm(initial={"raw_text": raw_text})
-        if post_form.is_valid():
-            moderation = moderate_activity_form(request.user, post_form)
+        replay = None
+        try:
+            replay = published_replay(request.user, request.POST)
+        except RequestError as error:
+            response_status = error.status
+            messages.error(request, str(error))
+        if replay:
+            return redirect("post_detail", post_id=replay.pk)
+        if len(raw_text) > 2000:
+            post_form.add_error(None, "Original input must be at most 2,000 characters.")
+            response_status = 400
+        if response_status == 200 and post_form.is_valid():
+            try:
+                consume_limit(request.user, "publish", request_id=request.POST.get("request_id"), digest=publish_fingerprint(request.POST))
+                moderation = moderate_activity_form(request.user, post_form)
+            except RequestError as error:
+                moderation = {"service_unavailable": True, "reason": str(error)}
+                response_status, retry_after = error.status, error.retry_after
             date_confirmed = request.POST.get("confirm_date") == "yes"
             date_confirm_message = None if date_confirmed else check_publish_date(
                 raw_text, post_form.cleaned_data.get("start_time")
             )
-            if moderation.get("flagged"):
+            if moderation.get("service_unavailable"):
+                response_status = response_status if response_status != 200 else 503
+                messages.error(request, moderation.get("reason", "Safety checking is temporarily unavailable. Your input has been kept."))
+            elif moderation.get("flagged"):
                 messages.error(request, f"Safety check flagged this post: {moderation.get('reason', 'Please revise it.')}")
             elif date_confirm_message:
                 # Guardrail: an explicit date in the original text conflicts
@@ -130,11 +186,15 @@ def create_post(request):
                 # confirm instead of silently publishing a wrong date.
                 messages.warning(request, "Please confirm the start date before publishing.")
             else:
-                post = save_activity_post_for_user(request.user, post_form)
-                messages.success(request, "Your Plus One card is live.")
-                return redirect("post_detail", post_id=post.id)
+                try:
+                    post = save_activity_post_for_user(request.user, post_form, request_id=request.POST.get("request_id"), request_fingerprint=publish_fingerprint(request.POST))
+                    messages.success(request, "Your Plus One card is live.")
+                    return redirect("post_detail", post_id=post.id)
+                except RequestError as error:
+                    response_status = error.status
+                    messages.error(request, str(error))
 
-    return render(
+    response = render(
         request,
         "plusone/create_post.html",
         {
@@ -146,8 +206,13 @@ def create_post(request):
             "draft_check": draft_check,
             "date_confirm_message": date_confirm_message,
             "raw_text": raw_text,
+            "request_id": request_id,
         },
+        status=response_status,
     )
+    if retry_after:
+        response["Retry-After"] = str(retry_after)
+    return response
 
 
 @login_required
@@ -179,22 +244,40 @@ def edit_post(request, post_id):
         return redirect("dashboard")
 
     form = ActivityPostForm(initial=post_edit_initial(post), instance=post)
+    response_status = 200
+    retry_after = None
     if request.method == "POST" and request.POST.get("action") == "save":
         form = ActivityPostForm(request.POST, instance=post)
         if form.is_valid():
-            moderation = moderate_activity_form(request.user, form)
-            if moderation.get("flagged"):
+            try:
+                consume_limit(request.user, "publish")
+                moderation = moderate_activity_form(request.user, form)
+            except RequestError as error:
+                moderation = {"service_unavailable": True, "reason": str(error)}
+                response_status, retry_after = error.status, error.retry_after
+            if moderation.get("service_unavailable"):
+                response_status = response_status if response_status != 200 else 503
+                messages.error(request, moderation.get("reason", "Safety checking is temporarily unavailable. Your edits have been kept."))
+            elif moderation.get("flagged"):
                 messages.error(request, f"Safety check flagged this update: {moderation.get('reason', 'Please revise it.')}")
             else:
-                save_activity_post_for_user(request.user, form)
-                messages.success(request, "Your Plus One card was updated.")
-                return redirect("post_detail", post_id=post.id)
+                try:
+                    save_activity_post_for_user(request.user, form)
+                    messages.success(request, "Your Plus One card was updated.")
+                    return redirect("post_detail", post_id=post.id)
+                except RequestError as error:
+                    response_status = error.status
+                    form.add_error(None, str(error))
 
-    return render(
+    response = render(
         request,
         "plusone/edit_post.html",
         {"post": post, "post_form": form, "post_preview": post_form_preview(form)},
+        status=response_status,
     )
+    if retry_after:
+        response["Retry-After"] = str(retry_after)
+    return response
 
 
 @login_required
@@ -220,7 +303,7 @@ def swipe_post(request, post_id):
         messages.info(request, "Skipped. Undo is available while you keep browsing.")
         return redirect("discover")
     if result.outcome == SwipeOutcome.MATCH_CREATED:
-        messages.success(request, "It's a vibe. You have five minutes to chat.")
+        messages.success(request, "It's a vibe. Open the chat; your five minutes begin when you are both there.")
         return redirect(f"{reverse('discover')}?matched={result.match_id}")
     if result.outcome == SwipeOutcome.TRY_AGAIN:
         messages.warning(request, "That card is busy right now. Please try again.")
@@ -256,21 +339,28 @@ def chat(request, match_id):
         return HttpResponseForbidden("Only matched users can access this chat.")
     match.mark_chat_expired_if_needed()
     form = ChatMessageForm()
+    response_status = 200
+    retry_after = None
 
     if request.method == "POST" and request.POST.get("action") == "send":
         form = ChatMessageForm(request.POST)
-        if match.status != Match.Status.CHATTING:
-            messages.error(request, "This chat is no longer active.")
-        elif form.is_valid():
+        if form.is_valid():
             text = form.cleaned_data["message"]
-            message, moderation = create_chat_message(match, request.user, text)
+            try:
+                message, moderation = create_chat_message(match, request.user, text, request.POST.get("request_id"))
+            except RequestError as error:
+                message, moderation = None, {"reason": str(error), "service_unavailable": True}
+                response_status, retry_after = error.status, error.retry_after
             if moderation.get("flagged"):
                 messages.error(request, f"Message blocked by safety check: {moderation.get('reason', 'Safety check triggered.')}")
+            elif moderation.get("service_unavailable"):
+                response_status = response_status if response_status != 200 else 503
+                messages.error(request, moderation.get("reason", "Safety checking is temporarily unavailable. Your message has been kept."))
             elif moderation.get("unavailable"):
+                response_status = 409
                 messages.error(request, "This chat closed before the message could be sent.")
             elif message:
                 return redirect("chat", match_id=match.id)
-            return redirect("chat", match_id=match.id)
 
     if request.method == "POST" and request.POST.get("action") == "agree":
         agreement = record_agreement(match.id, request.user)
@@ -280,29 +370,22 @@ def chat(request, match_id):
 
     if request.method == "POST" and request.POST.get("action") in {"decline", "report"}:
         action = request.POST.get("action")
-        reason = Match.CloseReason.REPORTED if action == "report" else Match.CloseReason.DECLINED
-        result = close_match(match.id, request.user, reason)
-        if result.closed and reason == Match.CloseReason.REPORTED:
-            messages.warning(request, "Safety report submitted. This chat was closed.")
-        elif result.closed:
-            messages.info(request, "Chat declined. The Plus One can continue without this match.")
-        else:
-            messages.info(request, "This chat is already closed.")
-        return redirect("chat", match_id=match.id)
+        try:
+            if action == "report":
+                report_match(match.pk, request.user, request.POST.get("category", "other"), request.POST.get("reason", ""))
+                messages.warning(request, "Safety report recorded. Any open conversation has been closed.")
+            else:
+                close_match(match.pk, request.user, Match.CloseReason.DECLINED)
+                messages.info(request, "This match is closed.")
+            return redirect("chat", match_id=match.id)
+        except RequestError as error:
+            response_status = error.status
+            messages.error(request, str(error))
 
     if request.method == "POST" and request.POST.get("action") == "confirm_meetup":
         # This is a self-reported outcome, not independent proof of attendance.
         # Record at most one confirmation per participant and match.
-        if match.status == Match.Status.AGREED and not ProductEvent.objects.filter(
-            name=ProductEvent.Name.MEETUP_CONFIRMED,
-            match=match,
-            user=request.user,
-        ).exists():
-            log_event(
-                ProductEvent.Name.MEETUP_CONFIRMED,
-                user=request.user,
-                match=match,
-            )
+        if confirm_meetup(match.pk, request.user):
             messages.success(request, "Thanks - your meetup confirmation was recorded.")
         return redirect("chat", match_id=match.id)
 
@@ -311,24 +394,22 @@ def chat(request, match_id):
         # Agent-assisted openers: AI drafts, the user picks and sends.
         # Suggestions are never auto-sent (same rule as post publishing).
         if match.status == Match.Status.CHATTING:
-            opener_suggestions = generate_openers(request.user, match)
-            log_event(
-                ProductEvent.Name.OPENER_SUGGESTED,
-                user=request.user,
-                match=match,
-                properties={
-                    "count": len(opener_suggestions),
-                    # AI-generated texts only; needed to attribute adoption.
-                    "texts": [opener["text"] for opener in opener_suggestions],
-                },
-            )
+            try:
+                consume_limit(request.user, "ai")
+                opener_suggestions = generate_openers(request.user, match)
+                log_event(ProductEvent.Name.OPENER_SUGGESTED, user=request.user, match=match, properties={"count": len(opener_suggestions), "texts": [opener["text"] for opener in opener_suggestions]})
+            except RequestError as error:
+                response_status, retry_after = error.status, error.retry_after
+                messages.error(request, str(error))
         else:
             messages.error(request, "This chat is no longer active.")
 
     viewer_agreed = match.poster_agreed if request.user.id == match.poster_id else match.swiper_agreed
     other_agreed = match.swiper_agreed if request.user.id == match.poster_id else match.poster_agreed
-    messages_list = list(match.messages.select_related("sender").order_by("id"))
-    return render(
+    with locked_match(match.pk) as match:
+        expire_locked(match)
+        messages_list = list(match.messages.select_related("sender").order_by("id"))
+    response = render(
         request,
         "plusone/chat.html",
         {
@@ -338,6 +419,9 @@ def chat(request, match_id):
             "form": form,
             "viewer_agreed": viewer_agreed,
             "other_agreed": other_agreed,
+            "phase_deadline": match.phase_deadline,
+            "server_time": timezone.now(),
+            "request_id": request.POST.get("request_id") or str(uuid4()),
             "opener_suggestions": opener_suggestions,
             # Reply mode: once real conversation exists, the assistant
             # suggests continuations instead of first messages.
@@ -348,7 +432,11 @@ def chat(request, match_id):
                 user=request.user,
             ).exists(),
         },
+        status=response_status,
     )
+    if retry_after:
+        response["Retry-After"] = str(retry_after)
+    return response
 
 
 @login_required
@@ -384,11 +472,14 @@ def chat_messages(request, match_id):
 
     if request.method == "POST":
         form = ChatMessageForm(request.POST)
-        if match.status != Match.Status.CHATTING:
-            return JsonResponse({"ok": False, "error": "This chat is no longer active."}, status=409)
         if not form.is_valid():
             return JsonResponse({"ok": False, "errors": form.errors}, status=400)
-        message, moderation = create_chat_message(match, request.user, form.cleaned_data["message"])
+        try:
+            message, moderation = create_chat_message(match, request.user, form.cleaned_data["message"], request.POST.get("request_id"))
+        except RequestError as error:
+            return _json_request_error(error)
+        if moderation.get("service_unavailable"):
+            return JsonResponse({"ok": False, "error": moderation.get("reason", "Safety checking is temporarily unavailable. Your input has been kept.")}, status=503)
         if moderation.get("flagged"):
             return JsonResponse(
                 {
@@ -410,16 +501,38 @@ def chat_messages(request, match_id):
             }
         )
 
-    after_id = request.GET.get("after")
-    message_qs = match.messages.select_related("sender").order_by("id")
-    if after_id and after_id.isdigit():
-        message_qs = message_qs.filter(id__gt=int(after_id))
-    payload = [chat_message_payload(message, request.user) for message in message_qs]
-    return JsonResponse(
-        {
-            "ok": True,
-            "messages": payload,
-            "chat_status": match.status,
-            "chat_active": match.status == Match.Status.CHATTING,
-        }
-    )
+    if request.method != "GET":
+        return JsonResponse({"ok": False}, status=405)
+    after_id = request.GET.get("after", "0")
+    if not after_id.isdigit() or len(after_id) > 18:
+        return JsonResponse({"ok": False, "error": "Invalid message cursor."}, status=400)
+    after_id = int(after_id)
+    with locked_match(match.pk) as current:
+        expire_locked(current)
+        payload = [chat_message_payload(message, request.user) for message in current.messages.select_related("sender").filter(pk__gt=after_id).order_by("id")]
+        data = {"ok": True, "messages": payload, "next_cursor": max([after_id] + [item["id"] for item in payload]), **phase_payload(current, request.user)}
+    return JsonResponse(data)
+
+
+@login_required
+@require_POST
+def chat_presence(request, match_id):
+    if request.POST.get("visible") not in {"true", "false"}:
+        return JsonResponse({"ok": False, "error": "visible must be true or false"}, status=400)
+    match = set_presence(match_id, request.user, request.POST["visible"] == "true")
+    if match is None:
+        return HttpResponseForbidden("Only participants can update presence.")
+    return JsonResponse({"ok": True, **phase_payload(match, request.user)})
+
+
+@require_GET
+def session_updates(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({"authenticated": False, "matches": [], "open_count": 0, "waiting_count": 0})
+    ids = list(Match.objects.filter(Q(poster=request.user) | Q(swiper=request.user), status__in=Match.LIVE_STATUSES).values_list("pk", flat=True))
+    for match_id in ids:
+        with locked_match(match_id) as match:
+            expire_locked(match)
+    matches = Match.objects.filter(Q(poster=request.user) | Q(swiper=request.user), status__in=Match.HOLDING_STATUSES).select_related("post").order_by("-created_at")[:50]
+    rows = [{"id": match.pk, "url": reverse("chat", args=[match.pk]), "status": match.status, "title": match.post.title} for match in matches]
+    return JsonResponse({"authenticated": True, "matches": rows, "open_count": sum(row["status"] in Match.LIVE_STATUSES for row in rows), "waiting_count": sum(row["status"] == Match.Status.WAITING for row in rows), "server_time": timezone.now().isoformat()})

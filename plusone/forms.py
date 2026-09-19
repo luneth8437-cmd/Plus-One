@@ -32,7 +32,7 @@ class ActivityPostForm(forms.ModelForm):
         model = ActivityPost
         fields = ["title", "description", "activity_type", "location", "start_time", "expire_minutes"]
         widgets = {
-            "description": forms.Textarea(attrs={"rows": 3}),
+            "description": forms.Textarea(attrs={"rows": 3, "maxlength": 2000}),
             "start_time": forms.DateTimeInput(attrs={"type": "datetime-local"}),
         }
 
@@ -59,6 +59,8 @@ class ActivityPostForm(forms.ModelForm):
         post.user = user
         post.expire_time = timezone.now() + timedelta(minutes=self.cleaned_data["expire_minutes"])
         post.capacity = 1
+        if post.pk:
+            raise ValueError("Use the locked edit service for existing posts.")
         post.status = ActivityPost.Status.ACTIVE
         post.save()
         return post

@@ -2,6 +2,7 @@ import time
 
 from plusone.ai_services.client import chat_completion as default_chat_completion
 from plusone.ai_services.client import llm_client as default_llm_client
+from plusone.ai_services.client import request_timeout_seconds
 from plusone.ai_services.logging import save_log
 from plusone.models import ActivityPost, LLMLog
 
@@ -30,6 +31,7 @@ def generate_icebreaker(user, post, llm_client=default_llm_client, chat_completi
             response = chat_completion(
                 client,
                 llm_config,
+                timeout=request_timeout_seconds("opening"),
                 messages=[
                     {"role": "system", "content": "Write one friendly, platonic, short icebreaker for a five-minute campus meetup chat."},
                     {"role": "user", "content": prompt},

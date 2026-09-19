@@ -9,9 +9,10 @@ and out-of-range expiry values (U3).
 import os
 from datetime import timedelta
 from unittest.mock import patch
+from uuid import uuid4
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -151,6 +152,7 @@ class RuleDraftRegressionTests(TestCase):
         self.assertEqual(finalized["expire_minutes"], 180)
 
 
+@override_settings(DEBUG=True, PLUSONE_MODERATION_MODE="rules")
 class PublishDateGuardrailTests(TestCase):
     def setUp(self):
         self.llm_env = patch.dict(os.environ, {"DEEPSEEK_API_KEY": "", "OPENAI_API_KEY": ""})
@@ -170,6 +172,7 @@ class PublishDateGuardrailTests(TestCase):
     def _publish_payload(self, start_time, raw_text, confirm=False):
         payload = {
             "action": "publish",
+            "request_id": str(uuid4()),
             "raw_text": raw_text,
             "title": "Badminton Session",
             "description": "Intermediate level.",

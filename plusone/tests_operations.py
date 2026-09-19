@@ -1,4 +1,5 @@
 import os
+from uuid import uuid4
 from datetime import timedelta
 from io import StringIO
 from unittest.mock import patch
@@ -71,7 +72,7 @@ class ChatConcurrencyTests(TestCase):
         with patch("plusone.services.chat.moderate_text", side_effect=close_during_moderation):
             response = self.client.post(
                 reverse("chat_messages", args=[self.match.id]),
-                {"message": "See you there"},
+                {"message": "See you there", "request_id": str(uuid4())},
             )
 
         self.assertEqual(response.status_code, 409)
@@ -89,7 +90,7 @@ class ChatConcurrencyTests(TestCase):
 
 
 class LLMClientConfigurationTests(TestCase):
-    @patch("openai.OpenAI")
+    @patch("openai.AsyncOpenAI")
     def test_client_uses_bounded_timeout_and_retry_configuration(self, openai_client):
         with patch.dict(
             os.environ,
@@ -105,9 +106,9 @@ class LLMClientConfigurationTests(TestCase):
         openai_client.assert_called_once()
         kwargs = openai_client.call_args.kwargs
         self.assertEqual(kwargs["timeout"], 12.5)
-        self.assertEqual(kwargs["max_retries"], 2)
+        self.assertEqual(kwargs["max_retries"], 0)
 
-    @patch("openai.OpenAI")
+    @patch("openai.AsyncOpenAI")
     def test_client_falls_back_for_invalid_timeout_and_retry_values(self, openai_client):
         with patch.dict(
             os.environ,

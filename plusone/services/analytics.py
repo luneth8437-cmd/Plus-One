@@ -16,6 +16,7 @@ Design rules:
 import logging
 from datetime import timedelta
 
+from django.db import transaction
 from django.utils import timezone
 
 from plusone.models import ProductEvent
@@ -30,13 +31,32 @@ EDIT_DETECTION_PREFIX = 25
 
 def log_event(name, user=None, post=None, match=None, properties=None):
     try:
-        return ProductEvent.objects.create(
+        post = post or (match.post if match else None)
+        values = dict(
             name=name,
             user=user if getattr(user, "pk", None) else None,
             post=post,
             match=match,
             properties=properties or {},
+            post_reference=post.pk if post else None,
+            match_reference=match.pk if match else None,
+            post_created_at=post.created_at if post else None,
+            match_created_at=match.created_at if match else None,
         )
+        once_match = {ProductEvent.Name.MATCH_CREATED, ProductEvent.Name.CHAT_STARTED, ProductEvent.Name.BOTH_AGREED,
+                      ProductEvent.Name.FIRST_MESSAGE_SENT, ProductEvent.Name.FIRST_REPLY_RECEIVED}
+        once_user = {ProductEvent.Name.AGREE_CLICKED, ProductEvent.Name.MEETUP_CONFIRMED}
+        key = None
+        if name == ProductEvent.Name.PUBLISH_CARD and post:
+            key = f"{name}:post:{post.pk}"
+        elif name in once_match and match:
+            key = f"{name}:match:{match.pk}"
+        elif name in once_user and match and user:
+            key = f"{name}:match:{match.pk}:user:{user.pk}"
+        with transaction.atomic():
+            if key:
+                return ProductEvent.objects.get_or_create(event_key=key, defaults=values)[0]
+            return ProductEvent.objects.create(**values)
     except Exception:  # pragma: no cover - analytics must never break the flow
         logger.exception("Failed to log product event %s", name)
         return None

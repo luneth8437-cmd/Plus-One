@@ -4,6 +4,8 @@ from . import views
 
 urlpatterns = [
     path("healthz/", views.healthz, name="healthz"),
+    path("readyz/", views.readyz, name="readyz"),
+    path("session/updates/", views.session_updates, name="session_updates"),
     path("", views.home, name="home"),
     path("discover/", views.discover, name="discover"),
     path("login/", views.start_anonymous_session, name="login"),
@@ -20,5 +22,6 @@ urlpatterns = [
     path("matches/", views.dashboard, name="matches_dashboard"),
     path("chat/<int:match_id>/", views.chat, name="chat"),
     path("chat/<int:match_id>/messages/", views.chat_messages, name="chat_messages"),
+    path("chat/<int:match_id>/presence/", views.chat_presence, name="chat_presence"),
     path("chat/<int:match_id>/opener-click/", views.opener_click, name="opener_click"),
 ]

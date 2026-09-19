@@ -87,7 +87,7 @@ def dashboard_context_for_user(user):
         Match.objects.filter(Q(poster=user) | Q(swiper=user))
         .select_related("post", "poster", "swiper", "post__location")
     )
-    open_matches = [match for match in matches if match.status == Match.Status.CHATTING]
+    open_matches = [match for match in matches if match.status in Match.LIVE_STATUSES]
     handoff_matches = [match for match in matches if match.status == Match.Status.AGREED]
     closed_matches = [match for match in matches if match.status in {Match.Status.DECLINED, Match.Status.EXPIRED}]
 
@@ -95,6 +95,7 @@ def dashboard_context_for_user(user):
         "active_posts": active_posts,
         "active_posts_count": len(active_posts),
         "open_chats_count": len(open_matches),
+        "waiting_count": sum(match.status == Match.Status.WAITING for match in open_matches),
         "handoff_count": len(handoff_matches),
         "open_matches": open_matches,
         "handoff_matches": handoff_matches,
@@ -113,8 +114,8 @@ def dashboard_state(active_posts, open_matches, handoff_matches):
             "tone": "urgent",
             "eyebrow": "Needs decision",
             "title": match.post.title,
-            "body": f"{match.post.location.name} is waiting on a five-minute chat.",
-            "deadline": match.chat_expires_at,
+            "body": "Open the chat. Your five minutes begin when both people are recently online." if match.status == Match.Status.WAITING else f"{match.post.location.name} is waiting on a five-minute chat.",
+            "deadline": match.phase_deadline,
         }
     if active_posts:
         post = active_posts[0]

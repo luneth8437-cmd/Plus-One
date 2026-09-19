@@ -14,7 +14,7 @@ def effective_capacity(post=None):
     return ONE_TO_ONE_CAPACITY
 
 
-def sync_post_status_for_capacity(post):
+def sync_locked_post(post):
     if post.status == ActivityPost.Status.CANCELLED:
         return post.status
     if post.expire_time <= timezone.now():
@@ -34,10 +34,28 @@ def sync_post_status_for_capacity(post):
     return post.status
 
 
+def sync_post_status_for_capacity(post):
+    # Reload under the same lock as matching; a stale object must never revive
+    # a card that was cancelled in another request.
+    from plusone.services.lifecycle import locked_post
+    with locked_post(post.pk) as current:
+        status = sync_locked_post(current)
+    post.status = status
+    return status
+
+
 def reopen_posts_with_available_capacity():
-    return (
+    ids = list(
         ActivityPost.objects.filter(status=ActivityPost.Status.MATCHED, expire_time__gt=timezone.now())
         .annotate(holding_matches=Count("matches", filter=Q(matches__status__in=Match.HOLDING_STATUSES)))
         .filter(holding_matches__lt=effective_capacity())
-        .update(status=ActivityPost.Status.ACTIVE, updated_at=timezone.now())
+        .values_list("pk", flat=True)
     )
+    reopened = 0
+    from plusone.services.lifecycle import locked_post
+    for post_id in ids:
+        with locked_post(post_id) as post:
+            before = post.status
+            sync_locked_post(post)
+            reopened += before == ActivityPost.Status.MATCHED and post.status == ActivityPost.Status.ACTIVE
+    return reopened

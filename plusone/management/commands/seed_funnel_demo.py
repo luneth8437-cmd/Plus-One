@@ -20,9 +20,11 @@ Run with API keys unset for a fast, free run (deterministic fallbacks fire).
 """
 
 from datetime import timedelta
+from uuid import uuid4
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from plusone.ai import generate_openers
@@ -31,7 +33,8 @@ from plusone.models import CampusLocation, Match, ProductEvent, UserProfile
 from plusone.services.analytics import log_event
 from plusone.services.chat import create_chat_message, record_agreement
 from plusone.services.matching import SwipeOutcome, handle_swipe
-from plusone.services.posts import save_activity_post_for_user
+from plusone.services.posts import save_activity_post_for_user, publish_fingerprint
+from plusone.services.lifecycle import set_presence
 
 ACTIVITIES = [
     ("sports", "Campus Sports Hall", "Badminton doubles", "basketball, badminton, coffee"),
@@ -68,13 +71,17 @@ class Command(BaseCommand):
         })
         if not form.is_valid():
             raise SystemExit(f"Demo post form invalid: {form.errors}")
-        return save_activity_post_for_user(poster, form)
+        return save_activity_post_for_user(poster, form, request_id=uuid4(), request_fingerprint=publish_fingerprint(form.data))
 
-    def _match(self, swiper, post):
+    def _match(self, swiper, post, activate=True):
         result = handle_swipe(swiper, post.id, "interested")
         if result.outcome != SwipeOutcome.MATCH_CREATED:
             raise SystemExit(f"Expected match, got {result.outcome}")
-        return Match.objects.get(id=result.match_id)
+        match = Match.objects.get(id=result.match_id)
+        if activate:
+            set_presence(match.pk, post.user, True)
+            match = set_presence(match.pk, swiper, True)
+        return match
 
     def _suggest(self, user, match):
         openers = generate_openers(user, match)
@@ -86,6 +93,8 @@ class Command(BaseCommand):
         return openers
 
     def handle(self, *args, **options):
+        if not settings.DEBUG or settings.PLUSONE_MODERATION_MODE != "rules":
+            raise CommandError("Scripted funnel traffic requires an isolated DEBUG database and explicit rules mode. Never run against production.")
         if not CampusLocation.objects.exists():
             self.stdout.write(self.style.WARNING("No campus locations. Run migrate first."))
             return
@@ -104,8 +113,8 @@ class Command(BaseCommand):
                 first = openers[0]["text"] + " I can bring snacks too."
             else:
                 first = "Hey! Still up for this? I can head over soon."
-            create_chat_message(match, swiper, first)
-            create_chat_message(match, poster, "Yes! See you at the entrance in ten?")
+            create_chat_message(match, swiper, first, uuid4())
+            create_chat_message(match, poster, "Yes! See you at the entrance in ten?", uuid4())
             record_agreement(match.id, swiper)
             record_agreement(match.id, poster)
             session += 1
@@ -117,16 +126,16 @@ class Command(BaseCommand):
             match = self._match(swiper, post)
             if session % 2 == 0:
                 self._suggest(swiper, match)  # suggested but ignored
-            create_chat_message(match, swiper, "Hi! What level are you playing at these days?")
+            create_chat_message(match, swiper, "Hi! What level are you playing at these days?", uuid4())
             if replied:
-                create_chat_message(match, poster, "Pretty casual honestly, that ok?")
+                create_chat_message(match, poster, "Pretty casual honestly, that ok?", uuid4())
             session += 1
 
         # 4 silent matches.
         for _ in range(4):
             poster, swiper = self._pair(session, ACTIVITIES[session % len(ACTIVITIES)][3])
             post = self._publish(poster, session)
-            self._match(swiper, post)
+            self._match(swiper, post, activate=False)
             session += 1
 
         # 3 cards nobody swipes on.

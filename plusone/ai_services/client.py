@@ -1,3 +1,4 @@
+import asyncio
 import math
 import os
 
@@ -6,8 +7,11 @@ from django.conf import settings
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash"
-DEFAULT_LLM_TIMEOUT_SECONDS = 15.0
-DEFAULT_LLM_MAX_RETRIES = 1
+DEFAULT_LLM_TIMEOUT_SECONDS = 8.0
+DEFAULT_LLM_MAX_RETRIES = 0
+MODERATION_TIMEOUT_SECONDS = 5.0
+INTERACTIVE_TIMEOUT_SECONDS = 8.0
+MIN_REQUEST_TIMEOUT_SECONDS = 0.1
 
 
 def _positive_float_env(name, default):
@@ -18,12 +22,34 @@ def _positive_float_env(name, default):
     return value if math.isfinite(value) and value > 0 else default
 
 
-def _nonnegative_int_env(name, default):
+def _bounded_timeout_env(name, default, maximum, fallback_name=None):
     try:
-        value = int(os.environ.get(name, default))
+        raw_value = os.environ.get(name)
+        if raw_value is None and fallback_name:
+            raw_value = os.environ.get(fallback_name)
+        value = float(default if raw_value is None else raw_value)
     except (TypeError, ValueError):
         return default
-    return value if 0 <= value <= 5 else default
+    if not math.isfinite(value) or value <= 0:
+        return default
+    return max(MIN_REQUEST_TIMEOUT_SECONDS, min(value, maximum))
+
+
+def request_timeout_seconds(task):
+    """Return a per-request timeout capped by the user-facing latency budget."""
+    if task == "moderation":
+        return _bounded_timeout_env(
+            "PLUSONE_MODERATION_TIMEOUT_SECONDS",
+            MODERATION_TIMEOUT_SECONDS,
+            MODERATION_TIMEOUT_SECONDS,
+        )
+    name = "PLUSONE_PARSING_TIMEOUT_SECONDS" if task == "parsing" else "PLUSONE_OPENERS_TIMEOUT_SECONDS"
+    return _bounded_timeout_env(
+        name,
+        INTERACTIVE_TIMEOUT_SECONDS,
+        INTERACTIVE_TIMEOUT_SECONDS,
+        fallback_name="PLUSONE_INTERACTIVE_TIMEOUT_SECONDS",
+    )
 
 
 def llm_config():
@@ -63,18 +89,21 @@ def llm_client():
     if not config:
         return None
     try:
-        from openai import OpenAI
+        from openai import AsyncOpenAI
     except Exception:
         return None
 
     kwargs = {
         "api_key": config["api_key"],
         "timeout": _positive_float_env("PLUSONE_LLM_TIMEOUT_SECONDS", DEFAULT_LLM_TIMEOUT_SECONDS),
-        "max_retries": _nonnegative_int_env("PLUSONE_LLM_MAX_RETRIES", DEFAULT_LLM_MAX_RETRIES),
+        # These calls sit directly in request/response paths. Retrying inside
+        # the SDK can exceed the product latency budget, so callers get one
+        # cancellable HTTP attempt and decide how to fall back.
+        "max_retries": DEFAULT_LLM_MAX_RETRIES,
     }
     if config["base_url"]:
         kwargs["base_url"] = config["base_url"]
-    return OpenAI(**kwargs), config
+    return AsyncOpenAI(**kwargs), config
 
 
 def chat_completion(client, llm_config, **kwargs):
@@ -88,4 +117,16 @@ def chat_completion(client, llm_config, **kwargs):
             thinking_type = "disabled"
         extra_body.setdefault("thinking", {"type": thinking_type})
         kwargs["extra_body"] = extra_body
-    return client.chat.completions.create(**kwargs)
+    budget = min(float(kwargs.get("timeout", INTERACTIVE_TIMEOUT_SECONDS)), INTERACTIVE_TIMEOUT_SECONDS)
+
+    async def request():
+        # Cancellation propagates into HTTPX and closes its socket. A read
+        # timeout alone is not a total wall-clock deadline (a trickling server
+        # can reset it), and an abandoned worker thread would keep spending.
+        async with client:
+            return await client.chat.completions.create(**kwargs)
+
+    async def bounded_request():
+        return await asyncio.wait_for(request(), timeout=budget)
+
+    return asyncio.run(bounded_request())

@@ -1802,3 +1802,84 @@ Technical decisions:
 - Keep liveness checks free of database/session access; do not use the product root for infrastructure pings.
 - Keep external moderation outside the row lock, then recheck mutable chat state inside a short transaction.
 - Retain product events longer than content-bearing AI logs, and keep both windows independent from anonymous identity cleanup.
+
+## 2026-09-19: Product Audit and Additional Edge-Case Reproductions
+
+Problem or confusion:
+
+- The user requested a careful review of remaining product improvements after the runtime-hardening push.
+
+Diagnosis:
+
+- Local and GitHub `deepseek-api` both point to `324c0f4`; the corresponding GitHub CI succeeded.
+- Live Discover initially showed Render's wake-up page, then loaded; `/healthz/` returned 200/`ok`, and Create exposed the 2,000-character assist limit.
+- Eight isolated Django reproductions and a frontend JS model confirmed gaps in message synchronization, state transitions, cleanup eligibility, repeated publishing, agreement updates, and post-agreement reporting.
+
+Tried:
+
+- Re-ran all 127 existing tests in `/private/tmp/plusone-repair-venv` using SQLite and disabled external AI keys; all passed.
+- Ran additional reproductions only against an in-memory test database. Temporary script: `/private/tmp/plusone-audit-zQunXs/reproduce.py` (disposable; report preserves the scenarios).
+- Inspected live pages, GitHub branch/CI/keepalive records, and current Render/GitHub documentation; performed independent frontend and operations reviews.
+
+Worked:
+
+- Recorded prioritized findings, exact source locations, reproduction steps, and uncertainty boundaries in `docs/engineering/product_audit_2026-09-19.md`.
+- Confirmed the chat polling cursor can skip an unseen remote message, poll-driven expiry can strand a matched card, and editing can overwrite state after a concurrent match.
+- Confirmed cleanup can select an actively browsing old session with a future agreed meetup; this must be corrected before scheduling deletion automatically.
+
+Failed or abandoned:
+
+- GitHub queries were initially blocked by the restricted network environment; approved read-only network access succeeded.
+- A generic GitHub commit-status query returned no contexts and does not prove Render deployment state. Exact Render build SHA, database plan/expiry, production load, and live two-user write flows were not verified.
+
+Current status:
+
+- Product code and deployment are unchanged by this audit. Only this progress entry and the audit report were added locally; no new commit or push was performed.
+- Existing tests passing does not cover the newly reproduced edge cases. No cleanup was executed against user data.
+
+Next step:
+
+- Use the audit's implementation order for a separate authorized repair iteration; fix cleanup eligibility before enabling its schedule.
+
+Technical decisions:
+
+- Keep audit reproductions isolated from real databases and distinguish observed defects from proposed product-mechanism changes.
+- Do not infer current usage or exact hosting configuration from an empty Discover snapshot or the repository blueprint alone.
+
+## 2026-09-19: Reliable Product Lifecycle — Implementation and Backend Gate
+
+Symptom and scope:
+
+- Implemented the approved optimization plan against the canonical `deploy_checkout`, preserving the Django product rather than rebuilding a separate site.
+- Closed the audit's cursor, stale-capacity, edit-race, identity-reset, report, moderation and cleanup gaps; no production writes, paid plan changes or scheduled deletion were authorized/executed.
+
+Changes:
+
+- Incremental migrations 0010–0013 add waiting/presence/activation dates, nullable historical request IDs, report and rate-limit records, stable analytics references, last-seen and retired-identity fencing.
+- New matches reserve a slot in WAITING; two recent visible signals activate five minutes once. Rule icebreaker only at activation; AI suggestions remain explicit.
+- Central user/card/match lock order serializes lifecycle and all runtime chat writes. UUID retries converge after close; conflicting payloads fail explicitly. Matching/edit/cancel and reset preserve capacity and cancellation state.
+- Content moderation fails closed in production with actual cancellable five-second total budget; draft/openers have eight-second budget and no SDK retry. Rule moderation is explicitly DEBUG-only.
+- Added independent reports and admin queue, identity activity rules, protective/dry-run cleanup and database-shared limits. Report/evidence age is capped; LIVE/future-meetup safety takes precedence.
+- Analytics retains stable references after ownership deletion, uses an activity-creation cohort, and labels unknown legacy attribution rather than inventing it.
+
+Checks and results at this gate:
+
+- Existing 127-test suites were updated for request IDs, WAITING and fail-closed semantics and passed on SQLite.
+- Full PostgreSQL suite: 185 tests passed in 59.275s, including four real transaction races and 0009→0013 migration compatibility.
+- Latest focused SQLite reliability/retention/migration gate: 44 tests passed, with four PostgreSQL-only race cases intentionally skipped.
+- `manage.py check`, migration-drift checks, dependency integrity, JS syntax and `git diff --check` passed at their respective checkpoints.
+- The first PostgreSQL attempts exposed test-fixture issues (seed locations flushed between transaction tests, thread connections not closed, and migration test restoring only 0011); these were corrected, then the full suite passed.
+- Independent review found reset snapshot races, resolved-report resubmissions, canonical UUID quota keys and historical lock amplification. Fixes and targeted regressions are included.
+
+Environment decisions:
+
+- Used the existing disposable `/private/tmp/plusone-repair-venv`; no environment packages or caches were placed in the product tree.
+- Created an isolated PostgreSQL 16 test cluster under `/private/tmp/plusone-postgres.kJpSWB`, listening only on 127.0.0.1:55439. It is unrelated to the user's production/local business databases.
+- Production `PLUSONE_NEW_MATCHES_ENABLED` defaults false until compatible migrations/server/static assets are verified. Incident rollback means disabling new matching, not deploying pre-WAITING code.
+- Cleanup batch size bounds selected identities and independent records, not all rows cascaded from an identity. Start production previews with small batches and inspect ownership graphs before scheduling.
+
+Current status and next steps:
+
+- Backend acceptance gate passed locally. Browser weak-network/mobile verification and final delivery commits are in progress.
+- Render dashboard redirected to login, so live plan, database expiry and deployed SHA remain unverified. Public pricing and a separate checklist are recorded in `docs/engineering/deployment_upgrade_checklist.md`.
+- No push or production deployment has been performed in this implementation turn. No real user data has been cleaned up. Run production backup/restore and dry-run checks only in the separately approved deployment stage.

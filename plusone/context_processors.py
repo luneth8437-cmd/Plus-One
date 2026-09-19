@@ -8,6 +8,6 @@ def open_chat_badge(request):
         return {"open_chat_count": 0}
     count = Match.objects.filter(
         Q(poster=request.user) | Q(swiper=request.user),
-        status=Match.Status.CHATTING,
+        status__in=Match.LIVE_STATUSES,
     ).count()
     return {"open_chat_count": count}

@@ -21,6 +21,7 @@ import time
 
 from plusone.ai_services.client import chat_completion as default_chat_completion
 from plusone.ai_services.client import llm_client as default_llm_client
+from plusone.ai_services.client import request_timeout_seconds
 from plusone.ai_services.logging import save_log
 from plusone.ai_services.moderation import rule_moderate_text
 from plusone.models import ActivityPost, LLMLog, UserProfile
@@ -276,6 +277,7 @@ def generate_openers(user, match, llm_client=default_llm_client, chat_completion
             response = chat_completion(
                 client,
                 llm_config,
+                timeout=request_timeout_seconds("opening"),
                 response_format={"type": "json_object"},
                 messages=build_llm_messages(context),
             )
@@ -362,6 +364,7 @@ def generate_openers_from_context(context, llm_client=default_llm_client, chat_c
         response = chat_completion(
             client,
             llm_config,
+            timeout=request_timeout_seconds("opening"),
             response_format={"type": "json_object"},
             messages=build_llm_messages(context),
         )

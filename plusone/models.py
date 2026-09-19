@@ -12,6 +12,8 @@ class UserProfile(models.Model):
     year = models.CharField(max_length=40, blank=True)
     campus_area = models.CharField(max_length=80, blank=True)
     interests = models.CharField(max_length=240, blank=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    retired_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return self.display_name or self.user.username
@@ -74,7 +76,7 @@ class ActivityPost(models.Model):
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="activity_posts")
     title = models.CharField(max_length=120)
-    description = models.TextField(blank=True)
+    description = models.TextField(blank=True, max_length=2000)
     activity_type = models.CharField(max_length=20, choices=ActivityType.choices)
     location = models.ForeignKey(CampusLocation, on_delete=models.PROTECT, related_name="activity_posts")
     start_time = models.DateTimeField()
@@ -83,11 +85,16 @@ class ActivityPost(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    request_id = models.UUIDField(null=True, blank=True)
+    request_fingerprint = models.CharField(max_length=64, blank=True)
 
     objects = ActivityPostQuerySet.as_manager()
 
     class Meta:
         ordering = ["start_time", "expire_time"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "request_id"], name="unique_post_request"),
+        ]
         indexes = [
             models.Index(fields=["activity_type", "status"]),
             models.Index(fields=["start_time", "expire_time"]),
@@ -142,6 +149,7 @@ class Match(models.Model):
     """A five-minute anonymous chat created when someone swipes interested."""
 
     class Status(models.TextChoices):
+        WAITING = "waiting", "Waiting for both participants"
         CHATTING = "chatting", "Chatting"
         AGREED = "agreed", "Agreed to meet"
         DECLINED = "declined", "Declined"
@@ -150,8 +158,12 @@ class Match(models.Model):
     class CloseReason(models.TextChoices):
         DECLINED = "declined", "Declined by participant"
         REPORTED = "reported", "Reported safety issue"
+        CANCELLED = "cancelled", "Activity cancelled"
+        RESET = "reset", "Identity reset"
+        TIMEOUT = "timeout", "Timed out"
 
-    HOLDING_STATUSES = (Status.CHATTING, Status.AGREED)
+    LIVE_STATUSES = (Status.WAITING, Status.CHATTING)
+    HOLDING_STATUSES = (*LIVE_STATUSES, Status.AGREED)
 
     post = models.ForeignKey(ActivityPost, on_delete=models.CASCADE, related_name="matches")
     poster = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="posted_matches")
@@ -169,7 +181,11 @@ class Match(models.Model):
     close_reason = models.CharField(max_length=20, choices=CloseReason.choices, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    chat_expires_at = models.DateTimeField()
+    chat_expires_at = models.DateTimeField(null=True, blank=True)
+    waiting_expires_at = models.DateTimeField(null=True, blank=True)
+    poster_last_present_at = models.DateTimeField(null=True, blank=True)
+    swiper_last_present_at = models.DateTimeField(null=True, blank=True)
+    chat_started_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -177,6 +193,7 @@ class Match(models.Model):
         ]
         indexes = [
             models.Index(fields=["status", "chat_expires_at"], name="match_status_exp_idx"),
+            models.Index(fields=["status", "waiting_expires_at"], name="match_wait_exp_idx"),
             models.Index(fields=["poster", "status", "created_at"], name="match_poster_status_idx"),
             models.Index(fields=["swiper", "status", "created_at"], name="match_swiper_status_idx"),
         ]
@@ -193,27 +210,30 @@ class Match(models.Model):
 
     @property
     def chat_expired(self):
-        return self.chat_expires_at <= timezone.now()
+        return bool(self.chat_expires_at and self.chat_expires_at <= timezone.now())
+
+    @property
+    def phase_deadline(self):
+        return self.waiting_expires_at if self.status == self.Status.WAITING else self.chat_expires_at
 
     def mark_chat_expired_if_needed(self, save=True):
-        if self.chat_expired and self.status == self.Status.CHATTING:
+        if save:
+            from plusone.services.lifecycle import refresh_match
+            refreshed = refresh_match(self.pk)
+            self.status = refreshed.status
+            self.closed_at = refreshed.closed_at
+        elif self.phase_deadline and self.phase_deadline <= timezone.now() and self.status in self.LIVE_STATUSES:
             self.status = self.Status.EXPIRED
-            if save:
-                self.save(update_fields=["status"])
         return self.status == self.Status.EXPIRED
 
     def mark_agreed(self, user):
-        if user.id == self.poster_id:
-            self.poster_agreed = True
-        if user.id == self.swiper_id:
-            self.swiper_agreed = True
-        if self.poster_agreed and self.swiper_agreed:
-            self.status = self.Status.AGREED
-        self.save(update_fields=["poster_agreed", "swiper_agreed", "status"])
+        from plusone.services.chat import record_agreement
+        record_agreement(self.pk, user)
+        self.refresh_from_db()
 
 
 class ChatMessage(models.Model):
-    """Message inside a match; system messages are AI-generated icebreakers."""
+    """Message inside a match, including deterministic lifecycle notices."""
 
     match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="messages")
     sender = models.ForeignKey(
@@ -227,9 +247,14 @@ class ChatMessage(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     is_flagged = models.BooleanField(default=False)
     is_system = models.BooleanField(default=False)
+    request_id = models.UUIDField(null=True, blank=True)
+    request_fingerprint = models.CharField(max_length=64, blank=True)
 
     class Meta:
-        ordering = ["created_at"]
+        ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(fields=["match", "sender", "request_id"], name="unique_message_request"),
+        ]
         indexes = [
             models.Index(fields=["match", "id"], name="chat_match_id_idx"),
         ]
@@ -275,7 +300,10 @@ class ProductEvent(models.Model):
 
     class Name(models.TextChoices):
         PUBLISH_CARD = "publish_card", "Card published"
+        EDIT_CARD = "edit_card", "Card edited"
         MATCH_CREATED = "match_created", "Match created"
+        CHAT_STARTED = "chat_started", "Chat started"
+        BOTH_AGREED = "both_agreed", "Both agreed"
         OPENER_SUGGESTED = "opener_suggested", "Openers suggested"
         OPENER_CLICKED = "opener_clicked", "Opener suggestion clicked"
         FIRST_MESSAGE_SENT = "first_message_sent", "First message sent"
@@ -290,6 +318,11 @@ class ProductEvent(models.Model):
     match = models.ForeignKey("Match", on_delete=models.SET_NULL, null=True, blank=True)
     properties = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    post_reference = models.PositiveBigIntegerField(null=True, blank=True, db_index=True)
+    match_reference = models.PositiveBigIntegerField(null=True, blank=True, db_index=True)
+    post_created_at = models.DateTimeField(null=True, blank=True)
+    match_created_at = models.DateTimeField(null=True, blank=True)
+    event_key = models.CharField(max_length=100, null=True, blank=True, unique=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -300,3 +333,46 @@ class ProductEvent(models.Model):
 
     def __str__(self):
         return f"{self.name} @ {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class SafetyReport(models.Model):
+    class Category(models.TextChoices):
+        OTHER = "other", "Other safety concern"
+        CONTACT = "contact", "Unwanted contact details"
+        HARASSMENT = "harassment", "Harassment or threats"
+        UNSAFE_MEETING = "unsafe_meeting", "Unsafe meeting"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        IN_PROGRESS = "in_progress", "In progress"
+        RESOLVED = "resolved", "Resolved"
+
+    match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="reports")
+    reporter = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="safety_reports")
+    category = models.CharField(max_length=30, choices=Category.choices, default=Category.OTHER)
+    reason = models.CharField(max_length=500, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    handling_notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["match", "reporter"], name="unique_participant_report")]
+        indexes = [models.Index(fields=["status", "created_at"], name="report_status_created_idx")]
+
+    @property
+    def overdue(self):
+        from datetime import timedelta
+        return self.status != self.Status.RESOLVED and self.created_at < timezone.now() - timedelta(days=7)
+
+
+class RateLimitBucket(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    scope = models.CharField(max_length=30)
+    window_start = models.DateTimeField()
+    count = models.PositiveIntegerField(default=0)
+    request_keys = models.JSONField(default=dict, blank=True)
+    expires_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "scope", "window_start"], name="unique_rate_limit_window")]

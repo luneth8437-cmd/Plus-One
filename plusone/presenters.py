@@ -100,6 +100,7 @@ def chat_message_payload(message, viewer):
         bubble_class = "theirs"
     return {
         "id": message.id,
+        "request_id": str(message.request_id) if message.sender_id == viewer.id and message.request_id else None,
         "sender_label": sender_label,
         "bubble_class": bubble_class,
         "message": message.message,

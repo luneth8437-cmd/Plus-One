@@ -3,9 +3,10 @@
 import os
 from datetime import timedelta
 from unittest.mock import patch
+from uuid import uuid4
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from plusone.forms import ActivityPostForm
@@ -13,10 +14,12 @@ from plusone.management.commands.funnel_report import build_report
 from plusone.models import ActivityPost, CampusLocation, Match, ProductEvent
 from plusone.services.analytics import classify_opener_usage, log_event
 from plusone.services.chat import create_chat_message, record_agreement
+from plusone.services.lifecycle import set_presence
 from plusone.services.matching import SwipeOutcome, handle_swipe
-from plusone.services.posts import save_activity_post_for_user
+from plusone.services.posts import publish_fingerprint, save_activity_post_for_user
 
 
+@override_settings(DEBUG=True, PLUSONE_MODERATION_MODE="rules")
 class ProductEventTests(TestCase):
     def setUp(self):
         self.llm_env = patch.dict(os.environ, {"DEEPSEEK_API_KEY": "", "OPENAI_API_KEY": ""})
@@ -35,8 +38,10 @@ class ProductEventTests(TestCase):
 
     def _publish_post(self):
         start = timezone.localtime() + timedelta(hours=3)
+        request_id = str(uuid4())
         form = ActivityPostForm(
             data={
+                "request_id": request_id,
                 "title": "Badminton session",
                 "description": "Casual",
                 "activity_type": ActivityPost.ActivityType.SPORTS,
@@ -46,7 +51,19 @@ class ProductEventTests(TestCase):
             }
         )
         self.assertTrue(form.is_valid(), form.errors)
-        return save_activity_post_for_user(self.poster, form)
+        return save_activity_post_for_user(
+            self.poster,
+            form,
+            request_id=request_id,
+            request_fingerprint=publish_fingerprint(form.data),
+        )
+
+    def _activate(self, match):
+        set_presence(match.pk, self.poster, True)
+        set_presence(match.pk, self.swiper, True)
+        match.refresh_from_db()
+        self.assertEqual(match.status, Match.Status.CHATTING)
+        return match
 
     def test_publish_and_match_events(self):
         post = self._publish_post()
@@ -62,6 +79,7 @@ class ProductEventTests(TestCase):
         post = self._publish_post()
         result = handle_swipe(self.swiper, post.id, "interested")
         match = Match.objects.get(id=result.match_id)
+        self._activate(match)
 
         suggested = "Nice, a fellow badminton fan - meet at the entrance?"
         log_event(
@@ -71,12 +89,12 @@ class ProductEventTests(TestCase):
         )
 
         # First message: verbatim use of a suggestion.
-        create_chat_message(match, self.swiper, suggested)
+        create_chat_message(match, self.swiper, suggested, str(uuid4()))
         first = ProductEvent.objects.get(name=ProductEvent.Name.FIRST_MESSAGE_SENT)
         self.assertEqual(first.properties["opener_usage"], "verbatim")
 
         # Reply from the other side triggers first_reply_received, usage none.
-        create_chat_message(match, self.poster, "Sure, see you there!")
+        create_chat_message(match, self.poster, "Sure, see you there!", str(uuid4()))
         reply = ProductEvent.objects.get(name=ProductEvent.Name.FIRST_REPLY_RECEIVED)
         self.assertEqual(reply.user, self.poster)
         self.assertEqual(reply.properties["opener_usage"], "none")
@@ -102,8 +120,9 @@ class ProductEventTests(TestCase):
         post = self._publish_post()
         result = handle_swipe(self.swiper, post.id, "interested")
         match = Match.objects.get(id=result.match_id)
-        create_chat_message(match, self.swiper, "Hey, still up for it?")
-        create_chat_message(match, self.poster, "Yes!")
+        self._activate(match)
+        create_chat_message(match, self.swiper, "Hey, still up for it?", str(uuid4()))
+        create_chat_message(match, self.poster, "Yes!", str(uuid4()))
         record_agreement(match.id, self.swiper)
         record_agreement(match.id, self.poster)
 
@@ -122,8 +141,9 @@ class ProductEventTests(TestCase):
         post = self._publish_post()
         result = handle_swipe(self.swiper, post.id, "interested")
         match = Match.objects.get(id=result.match_id)
+        self._activate(match)
         secret = "My private plan mentioning a secret keyword xyzzy"
-        create_chat_message(match, self.swiper, secret)
+        create_chat_message(match, self.swiper, secret, str(uuid4()))
         for event in ProductEvent.objects.all():
             self.assertNotIn("xyzzy", repr(event.properties))
 

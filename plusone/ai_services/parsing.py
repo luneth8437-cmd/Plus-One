@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from plusone.ai_services.client import chat_completion as default_chat_completion
 from plusone.ai_services.client import llm_client as default_llm_client
+from plusone.ai_services.client import request_timeout_seconds
 from plusone.ai_services.logging import save_log
 from plusone.ai_services.validation import extract_explicit_date, validate_draft
 from plusone.models import ActivityPost, CampusLocation, LLMLog
@@ -220,6 +221,7 @@ def parse_activity_text(user, text, llm_client=default_llm_client, chat_completi
             response = chat_completion(
                 client,
                 llm_config,
+                timeout=request_timeout_seconds("parsing"),
                 response_format={"type": "json_object"},
                 messages=[
                     {

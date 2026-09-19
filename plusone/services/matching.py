@@ -2,14 +2,15 @@ from dataclasses import dataclass
 from datetime import timedelta
 from time import sleep
 
-from django.db import OperationalError, transaction
+from django.conf import settings
+from django.db import OperationalError
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
-from plusone.ai import generate_icebreaker
-from plusone.models import ActivityPost, ChatMessage, Match, ProductEvent, Swipe
+from plusone.models import ActivityPost, Match, ProductEvent, Swipe
 from plusone.services.analytics import log_event
 from plusone.services.capacity import effective_capacity, holding_match_count
+from plusone.services.lifecycle import expire_locked, locked_post, identities_retired
 
 SQLITE_LOCK_RETRY_DELAYS = (0.05, 0.15)
 
@@ -53,36 +54,28 @@ def handle_swipe(user, post_id, action):
     if result.outcome != SwipeOutcome.MATCH_CREATED:
         return result
 
-    # The external AI call is kept outside the transaction so a slow provider
-    # does not hold a database row lock.
-    icebreaker = generate_icebreaker(user, created_match.post)
-    ChatMessage.objects.create(match=created_match, sender=None, message=icebreaker, is_system=True)
-    log_event(
-        ProductEvent.Name.MATCH_CREATED,
-        user=user,
-        post=created_match.post,
-        match=created_match,
-        properties={
-            "activity_type": created_match.post.activity_type,
-        },
-    )
     return result
 
 
 def _record_swipe(user, post_id, action):
     created_match = None
 
-    with transaction.atomic():
+    with locked_post(post_id, user.pk) as post:
+        if identities_retired([user.pk, post.user_id]):
+            return SwipeResult(SwipeOutcome.INACTIVE_POST, post.id), created_match
         # Lock the post while recording a swipe so two users cannot create
         # competing matches for the same active card at the same time.
-        post = get_object_or_404(
-            ActivityPost.objects.select_for_update().select_related("user", "location"),
-            id=post_id,
-        )
+        for current in Match.objects.select_for_update().filter(post=post, status__in=Match.LIVE_STATUSES).order_by("pk"):
+            current.post = post
+            expire_locked(current)
         if post.user_id == user.id:
             return SwipeResult(SwipeOutcome.OWN_POST, post.id), created_match
         if action not in [Swipe.Action.INTERESTED, Swipe.Action.PASS]:
             return SwipeResult(SwipeOutcome.INVALID_ACTION, post.id), created_match
+
+        existing = Match.objects.filter(post=post, swiper=user).first()
+        if action == Swipe.Action.INTERESTED and existing:
+            return SwipeResult(SwipeOutcome.MATCH_EXISTS, post.id, existing.pk), created_match
 
         if action == Swipe.Action.PASS:
             if post.is_expired:
@@ -92,19 +85,22 @@ def _record_swipe(user, post_id, action):
 
         if _post_is_full(post):
             return SwipeResult(SwipeOutcome.FULL_POST, post.id), created_match
-        if post.status != ActivityPost.Status.ACTIVE:
+        if post.status != ActivityPost.Status.ACTIVE or post.is_expired:
             return SwipeResult(SwipeOutcome.INACTIVE_POST, post.id), created_match
 
         Swipe.objects.update_or_create(user=user, post=post, defaults={"action": action})
         if _post_is_full(post):
             return SwipeResult(SwipeOutcome.FULL_POST, post.id), created_match
 
+        if not settings.PLUSONE_NEW_MATCHES_ENABLED:
+            return SwipeResult(SwipeOutcome.TRY_AGAIN, post.id), created_match
         match, created = Match.objects.get_or_create(
             post=post,
             swiper=user,
             defaults={
                 "poster": post.user,
-                "chat_expires_at": timezone.now() + timedelta(minutes=5),
+                "status": Match.Status.WAITING,
+                "waiting_expires_at": min(timezone.now() + timedelta(minutes=10), post.expire_time),
             },
         )
         if not created:
@@ -117,6 +113,7 @@ def _record_swipe(user, post_id, action):
         )
         post.save(update_fields=["status", "updated_at"])
         created_match = match
+        log_event(ProductEvent.Name.MATCH_CREATED, user=user, post=post, match=match, properties={"activity_type": post.activity_type})
 
     return SwipeResult(SwipeOutcome.MATCH_CREATED, post.id, created_match.id), created_match
 

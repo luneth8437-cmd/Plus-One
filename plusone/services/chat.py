@@ -1,13 +1,10 @@
 from dataclasses import dataclass
 
-from django.db import transaction
-from django.shortcuts import get_object_or_404
-from django.utils import timezone
-
 from plusone.ai import moderate_text
-from plusone.models import ChatMessage, Match, ProductEvent
+from plusone.models import ChatMessage, Match, ProductEvent, SafetyReport
 from plusone.services.analytics import log_event, log_message_events
-from plusone.services.capacity import sync_post_status_for_capacity
+from plusone.services.lifecycle import end_locked, expire_locked, locked_match, identities_retired
+from plusone.services.requests import RequestError, check_replay, consume_limit, fingerprint, request_uuid
 
 
 @dataclass(frozen=True)
@@ -23,94 +20,100 @@ class CloseMatchResult:
 
 
 def record_agreement(match_id, user):
-    with transaction.atomic():
-        # Agreement is a two-sided state transition, so lock the match before
-        # checking participant status and updating the agreed flags.
-        match = get_object_or_404(
-            Match.objects.select_for_update().select_related("post", "poster", "swiper", "post__location"),
-            id=match_id,
-        )
+    with locked_match(match_id) as match:
         if not match.is_participant(user):
             return AgreementResult(False, match.id)
-
-        match.mark_chat_expired_if_needed()
+        expire_locked(match)
+        if identities_retired(match.participant_ids()):
+            end_locked(match, reason=Match.CloseReason.RESET)
         if match.status != Match.Status.CHATTING:
             return AgreementResult(False, match.id)
-
-        match.mark_agreed(user)
-        log_event(
-            ProductEvent.Name.AGREE_CLICKED,
-            user=user,
-            match=match,
-            properties={"both_agreed": match.poster_agreed and match.swiper_agreed},
-        )
+        field = "poster_agreed" if user.pk == match.poster_id else "swiper_agreed"
+        if not getattr(match, field):
+            setattr(match, field, True)
+            match.status = Match.Status.AGREED if match.poster_agreed and match.swiper_agreed else Match.Status.CHATTING
+            match.save(update_fields=[field, "status"])
+            log_event(ProductEvent.Name.AGREE_CLICKED, user=user, match=match, properties={"both_agreed": match.status == Match.Status.AGREED})
+            if match.status == Match.Status.AGREED:
+                log_event(ProductEvent.Name.BOTH_AGREED, match=match)
         return AgreementResult(True, match.id)
 
 
 def close_match(match_id, user, reason):
-    with transaction.atomic():
-        match = get_object_or_404(
-            Match.objects.select_for_update().select_related("post", "poster", "swiper", "post__location"),
-            id=match_id,
-        )
+    if reason == Match.CloseReason.REPORTED:
+        report_match(match_id, user)
+        return CloseMatchResult(True, match_id)
+    with locked_match(match_id) as match:
         if not match.is_participant(user):
             return CloseMatchResult(False, match.id)
-
-        match.mark_chat_expired_if_needed()
-        if match.status != Match.Status.CHATTING:
-            return CloseMatchResult(False, match.id)
-
-        reason = reason if reason in Match.CloseReason.values else Match.CloseReason.DECLINED
-        match.status = Match.Status.DECLINED
-        match.closed_by = user
-        match.close_reason = reason
-        match.closed_at = timezone.now()
-        match.save(update_fields=["status", "closed_by", "close_reason", "closed_at"])
-        ChatMessage.objects.create(
-            match=match,
-            sender=None,
-            message=_close_message(reason),
-            is_system=True,
-        )
-
-    sync_post_status_for_capacity(match.post)
-    return CloseMatchResult(True, match.id)
+        expire_locked(match)
+        closed = end_locked(match, status=Match.Status.DECLINED, reason=Match.CloseReason.DECLINED, user=user)
+        return CloseMatchResult(closed, match.id)
 
 
-def _close_message(reason):
-    if reason == Match.CloseReason.REPORTED:
-        return "Safety report submitted. This chat is now closed."
-    return "One participant declined. This chat is now closed."
+def report_match(match_id, user, category="other", reason=""):
+    if category not in SafetyReport.Category.values or len(reason) > 500:
+        raise RequestError("Choose a report category and use at most 500 characters.")
+    with locked_match(match_id) as match:
+        if not match.is_participant(user):
+            raise RequestError("Only participants can report this match.", 403)
+        report, created = SafetyReport.objects.get_or_create(match=match, reporter=user, defaults={"category": category, "reason": reason})
+        if not created:
+            from datetime import timedelta
+            from django.utils import timezone
+            if report.created_at <= timezone.now() - timedelta(days=90):
+                raise RequestError("This report has reached its retention deadline. It cannot be supplemented; contact site support for a new concern.", 410)
+            if report.status == SafetyReport.Status.RESOLVED:
+                report.status = SafetyReport.Status.PENDING
+            report.category = category
+            report.reason = reason
+            report.save(update_fields=["category", "reason", "status", "updated_at"])
+        expire_locked(match)
+        end_locked(match, status=Match.Status.DECLINED, reason=Match.CloseReason.REPORTED, user=user)
+        return report
 
 
-def create_chat_message(match, user, text):
-    if not match.is_participant(user) or match.status != Match.Status.CHATTING or match.chat_expired:
+def message_replay(match, user, request_id, digest):
+    return check_replay(ChatMessage.objects.filter(match=match, sender=user, request_id=request_id).first(), digest)
+
+
+def create_chat_message(match, user, text, request_id=None):
+    if not match.is_participant(user):
         return None, {"flagged": False, "unavailable": True}
-
+    request_id = request_uuid(request_id)
+    digest = fingerprint({"message": text})
+    replay = message_replay(match, user, request_id, digest)
+    if replay:
+        return replay, {"flagged": False, "replayed": True}
+    if len(text) > 500 or not text.strip():
+        raise RequestError("Messages must contain 1–500 characters.")
+    with locked_match(match.pk) as current:
+        expire_locked(current)
+        if identities_retired(current.participant_ids()):
+            end_locked(current, reason=Match.CloseReason.RESET)
+        if current.status != Match.Status.CHATTING:
+            return None, {"flagged": False, "unavailable": True}
+    consume_limit(user, "message", request_id=request_id, digest=digest)
     moderation = moderate_text(user, text)
-    if moderation.get("flagged"):
-        # Unsafe messages are not persisted; logs still keep the moderation
-        # decision for audit/debugging through LLMLog.
+    if moderation.get("flagged") or moderation.get("service_unavailable"):
         return None, moderation
-    # Moderation happens before taking the lock so a slow provider call cannot
-    # block agreement/decline requests. Re-read the match under a row lock
-    # afterwards so a message cannot be written to a chat that closed while
-    # moderation was running.
-    with transaction.atomic():
-        locked_match = Match.objects.select_for_update().filter(id=match.id).first()
-        if not locked_match or not locked_match.is_participant(user):
+    with locked_match(match.pk) as current:
+        replay = message_replay(current, user, request_id, digest)
+        if replay:
+            return replay, {"flagged": False, "replayed": True}
+        expire_locked(current)
+        if identities_retired(current.participant_ids()):
+            end_locked(current, reason=Match.CloseReason.RESET)
+        if current.status != Match.Status.CHATTING:
             return None, {**moderation, "unavailable": True}
-        locked_match.mark_chat_expired_if_needed()
-        if locked_match.status != Match.Status.CHATTING:
-            return None, {**moderation, "unavailable": True}
+        message = ChatMessage.objects.create(match=current, sender=user, message=text, request_id=request_id, request_fingerprint=digest)
+        log_message_events(current, user, text)
+        return message, moderation
 
-        message = ChatMessage.objects.create(
-            match=locked_match,
-            sender=user,
-            message=text,
-            is_flagged=False,
-        )
-        # Funnel events are derived server-side after the write; only the
-        # opener-usage classification is stored, never the message text.
-        log_message_events(locked_match, user, text)
-    return message, moderation
+
+def confirm_meetup(match_id, user):
+    with locked_match(match_id) as match:
+        if not match.is_participant(user) or match.status != Match.Status.AGREED:
+            return False
+        log_event(ProductEvent.Name.MEETUP_CONFIRMED, user=user, match=match)
+        return True

@@ -88,6 +88,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "plusone.middleware.LastSeenMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -195,6 +196,10 @@ LOGOUT_REDIRECT_URL = "discover"
 
 PLUSONE_OPENAI_MODEL = "gpt-4o-mini"
 PLUSONE_DEEPSEEK_MODEL = "deepseek-v4-flash"
+PLUSONE_MODERATION_MODE = os.environ.get("PLUSONE_MODERATION_MODE", "external")
+# Disable only NEW matches during an incident. Existing waiting chats remain
+# understood by this server; never roll back to pre-WAITING code.
+PLUSONE_NEW_MATCHES_ENABLED = _env_bool("PLUSONE_NEW_MATCHES_ENABLED", default=DEBUG)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
