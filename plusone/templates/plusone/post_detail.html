@@ -35,11 +35,11 @@
       <div class="swipe-row">
         <form method="post" action="{% url 'swipe_post' post.id %}">
           {% csrf_token %}
-          <button class="round pass" name="action" value="pass">×</button>
+          <button class="round pass" name="action" value="pass" aria-label="Pass on this Plus One">×</button>
         </form>
         <form method="post" action="{% url 'swipe_post' post.id %}">
           {% csrf_token %}
-          <button class="round join" name="action" value="interested">♥</button>
+          <button class="round join" name="action" value="interested" aria-label="Interested in this Plus One">♥</button>
         </form>
       </div>
     {% endif %}
@@ -50,7 +50,7 @@
     <ul class="plain-list">
       <li>Post must be active and not expired.</li>
       <li>Your temporary identity cannot swipe on its own post.</li>
-      <li>Interested swipe creates a match and five-minute chat.</li>
+      <li>Interested swipe creates a waiting room; the five-minute chat starts when both people arrive.</li>
       <li>Pass records the swipe without creating a match.</li>
     </ul>
   </aside>

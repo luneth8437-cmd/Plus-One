@@ -9,3 +9,6 @@ db.sqlite3
 outputs/
 staticfiles/
 *.zip
+node_modules/
+test-results/
+playwright-report/

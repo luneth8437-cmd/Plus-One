@@ -7,7 +7,7 @@
       {% if open_matches %}
         <p class="eyebrow">Needs decision</p>
         <h1>You have a chat waiting.</h1>
-        <p class="lead">Open chats expire fast. Decide whether to meet, decline, or report before the timer runs out.</p>
+        <p class="lead">Waiting rooms and open chats expire fast. Join your match, then decide whether to meet, decline, or report.</p>
       {% else %}
         <p class="eyebrow">My Plus Ones</p>
         <h1>Keep your Plus Ones moving.</h1>
@@ -42,6 +42,10 @@
           <span>chats</span>
         </div>
         <div>
+          <strong>{{ waiting_count }}</strong>
+          <span>waiting</span>
+        </div>
+        <div>
           <strong>{{ handoff_count }}</strong>
           <span>handoffs</span>
         </div>
@@ -66,9 +70,9 @@
               <div class="dashboard-row-main">
                 <strong>{{ match.post.title }}</strong>
                 <span>{{ match.post.location.name }} | {{ match.post.start_time|date:"M j, H:i" }}</span>
-                <small><span class="countdown" data-deadline="{{ match.chat_expires_at|date:'c' }}">--</span> left to decide</small>
+                <small><span class="countdown" data-deadline="{{ match.phase_deadline|date:'c' }}">--</span> {% if match.status == "waiting" %}left to join the chat{% else %}left to decide{% endif %}</small>
               </div>
-              <span class="teal-pill">Open chat</span>
+              <span class="teal-pill">{% if match.status == "waiting" %}Join waiting room{% else %}Open chat{% endif %}</span>
             </a>
           {% endfor %}
         </div>

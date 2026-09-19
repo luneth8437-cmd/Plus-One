@@ -1883,3 +1883,24 @@ Current status and next steps:
 - Backend acceptance gate passed locally. Browser weak-network/mobile verification and final delivery commits are in progress.
 - Render dashboard redirected to login, so live plan, database expiry and deployed SHA remain unverified. Public pricing and a separate checklist are recorded in `docs/engineering/deployment_upgrade_checklist.md`.
 - No push or production deployment has been performed in this implementation turn. No real user data has been cleaned up. Run production backup/restore and dry-run checks only in the separately approved deployment stage.
+
+## 2026-09-19: Browser Reliability and Mobile Acceptance
+
+Changes and diagnosis:
+
+- Kept the existing Django templates and visual language. Added waiting/approximate-presence/consent state, near-chat mobile actions, foreground updates and keyboard-accessible report/recovery controls.
+- Separated displayed messages from the GET cursor; added ordered ID deduplication, single-flight bounded polling, backoff, foreground refresh and independent accessible disconnection feedback.
+- Preserved exact pending form/message payloads and UUIDs through lost responses and reloads. Terminal chats keep unconfirmed input; successful old requests can still be reconciled. A GET acknowledgement cannot be undone by its later failed POST response.
+- Visual review caught legacy display rules overriding `hidden`; fixed the rule and pinned initial recovery-control visibility in the browser test.
+
+Verification:
+
+- Node regression suite: 8/8 passed.
+- SQLite Chromium end-to-end: two independent anonymous browser contexts passed publish → WAITING → both foreground → CHATTING → cross-client/keyboard messages → agreement → terminal report.
+- PostgreSQL end-to-end passed the same flow, including response loss, same-key retry, conflicting payload 409, late POST failure after GET confirmation, closed-chat replay, and refresh reconciliation.
+- Mobile 390px Discover/Create layouts have no horizontal overflow. Screenshot review of the chat region confirms input, countdown, consent/presence, decline and report controls remain readable and accessible nearby.
+- Browser tests explicitly blank AI credentials and reject remote or non-test PostgreSQL URLs. Default browser execution creates disposable SQLite; it never inherits an ordinary business `DATABASE_URL`.
+
+Status:
+
+- Frontend implementation and browser checks are complete locally. No website has been replaced or deployed, and no live visitor data was used.

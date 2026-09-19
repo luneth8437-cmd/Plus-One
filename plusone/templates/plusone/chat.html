@@ -1,91 +1,114 @@
 {% extends "plusone/base.html" %}
 {% block title %}Anonymous Chat | Plus One{% endblock %}
 {% block content %}
-<section class="chat-shell">
+<section class="chat-shell phase-{{ match.status }}"
+         data-chat-root
+         data-chat-id="{{ match.id }}"
+         data-chat-endpoint="{% url 'chat_messages' match.id %}"
+         data-presence-endpoint="{% url 'chat_presence' match.id %}"
+         data-chat-status="{{ match.status }}"
+         data-phase-deadline="{{ phase_deadline|date:'c'|default:phase_deadline }}"
+         data-server-time="{{ server_time|date:'c'|default:server_time }}">
   <aside class="panel chat-context">
     <p class="eyebrow">Anonymous vibe chat</p>
     <h1>{{ match.post.title }}</h1>
     <p>{{ match.post.location.name }} · {{ match.post.start_time|date:"M j, H:i" }}</p>
-    {% if match.status == "chatting" %}
-      <p class="chat-decision-copy">You have five minutes to decide if you both want to meet.</p>
-    {% endif %}
-    <p>Status: <strong>{{ match.get_status_display }}</strong></p>
-    <p>Chat timer: <strong class="countdown" data-deadline="{{ match.chat_expires_at|date:'c' }}" data-fallback="chat closed">...</strong></p>
-    <div class="agree-state">
-      <span>You agreed: {{ viewer_agreed|yesno:"yes,no" }}</span>
-      <span>Match agreed: {{ other_agreed|yesno:"yes,no" }}</span>
-    </div>
-    {% if match.status == "chatting" %}
-      {% if viewer_agreed %}
-        <p class="notice">You agreed. Waiting for the other person.</p>
+    <p class="chat-decision-copy" data-phase-guidance>
+      {% if match.status == "waiting" %}
+        Waiting for both people to arrive. Chat starts when you are both here.
+      {% elif match.status == "chatting" %}
+        You have five minutes to decide if you both want to meet.
+      {% elif match.status == "agreed" %}
+        You both agreed to meet.
       {% else %}
-        {% if other_agreed %}
-          <p class="notice">Your match is ready to meet. Agree if you want to continue.</p>
-        {% endif %}
-        <form method="post">
-          {% csrf_token %}
-          <button class="primary-action coral" name="action" value="agree">Agree to meet</button>
-        </form>
+        This match is closed.
       {% endif %}
-      <p class="chat-safety-copy">Decline closes this match without a report. Use Report safety issue only when something feels unsafe.</p>
-      <div class="chat-safety-actions" aria-label="Chat safety actions">
+    </p>
+    <p>Status: <strong data-phase-label>{{ match.get_status_display }}</strong></p>
+    <p data-phase-timer{% if match.status != "waiting" and match.status != "chatting" %} hidden{% endif %}>Phase timer: <strong class="countdown" data-phase-countdown data-deadline="{{ phase_deadline|date:'c'|default:phase_deadline }}" data-fallback="phase closed">...</strong></p>
+    <div class="agree-state" aria-live="polite">
+      <span>You are here: <strong data-viewer-present>yes</strong></span>
+      <span>Match is here: <strong data-other-present>checking…</strong></span>
+      <span>You agreed: <strong data-viewer-agreed>{{ viewer_agreed|yesno:"yes,no" }}</strong></span>
+      <span>Match agreed: <strong data-other-agreed>{{ other_agreed|yesno:"yes,no" }}</strong></span>
+    </div>
+
+    <div data-open-phase-controls{% if match.status != "waiting" and match.status != "chatting" %} hidden{% endif %}>
+      <p class="notice" data-waiting-notice{% if match.status != "waiting" %} hidden{% endif %}>Chat and agreement unlock when both people are present.</p>
+      <div data-agreement-controls{% if viewer_agreed %} hidden{% endif %}>
         <form method="post">
           {% csrf_token %}
-          <button class="secondary-action compact" name="action" value="decline">Decline match</button>
-        </form>
-        <form method="post" data-confirm-submit="Report this chat and close it? Use this only for safety concerns.">
-          {% csrf_token %}
-          <button class="secondary-action compact danger" name="action" value="report">Report safety issue</button>
+          <button class="primary-action coral" name="action" value="agree" data-chat-action="agree"{% if match.status != "chatting" %} disabled{% endif %}>Agree to meet</button>
         </form>
       </div>
-    {% elif match.status == "agreed" %}
-      <section class="handoff-card" aria-label="Meet handoff">
-        <p class="eyebrow">Meet handoff</p>
-        <h2>Meet handoff ready.</h2>
-        <p class="handoff-summary">You both agreed to meet. Use this as the final check before leaving chat.</p>
-        <dl>
-          <div>
-            <dt>Plan</dt>
-            <dd>{{ match.post.title }}</dd>
-          </div>
-          <div>
-            <dt>Meet at</dt>
-            <dd>{{ match.post.location.name }}</dd>
-          </div>
-          <div>
-            <dt>Time</dt>
-            <dd>{{ match.post.start_time|date:"M j, H:i" }}</dd>
-          </div>
-        </dl>
-        <div class="handoff-safety">
-          <h3>Safety check</h3>
-          <ul>
-            <li>Meet in a public place.</li>
-            <li>Keep the first handoff brief.</li>
-            <li>Leave or report if anything feels off.</li>
-          </ul>
-        </div>
-        <div class="handoff-actions">
-          {% if meetup_confirmed %}
-            <p class="helptext">Meetup recorded - hope it went well!</p>
-          {% else %}
-            <form method="post" class="confirm-meetup-form">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="confirm_meetup">
-              <button type="submit" class="primary-action">We met - record it</button>
-            </form>
-          {% endif %}
-          <a class="primary-action" href="{% url 'dashboard' %}">Back to Dashboard</a>
-          <a class="secondary-action" href="{% url 'create_post' %}">Create another Plus One</a>
-        </div>
-      </section>
-    {% endif %}
+      <p class="notice" data-viewer-agreed-notice{% if not viewer_agreed %} hidden{% endif %}>You agreed. Waiting for the other person.</p>
+      <p class="notice" data-other-agreed-notice{% if not other_agreed or viewer_agreed %} hidden{% endif %}>Your match is ready to meet. Agree if you want to continue.</p>
+      <p class="chat-safety-copy">Decline closes this match without a report. Use Report safety issue only when something feels unsafe.</p>
+      <form method="post" class="chat-leave-form">
+        {% csrf_token %}
+        <button class="secondary-action compact" name="action" value="decline">Decline match</button>
+      </form>
+    </div>
+
+    <section class="handoff-card" data-handoff-card{% if match.status != "agreed" %} hidden{% endif %} aria-label="Meet handoff">
+      <p class="eyebrow">Meet handoff</p>
+      <h2>Meet handoff ready.</h2>
+      <p class="handoff-summary">Both participants chose to meet. Use this as the final check before leaving chat.</p>
+      <dl>
+        <div><dt>Plan</dt><dd>{{ match.post.title }}</dd></div>
+        <div><dt>Meet at</dt><dd>{{ match.post.location.name }}</dd></div>
+        <div><dt>Time</dt><dd>{{ match.post.start_time|date:"M j, H:i" }}</dd></div>
+      </dl>
+      <div class="handoff-safety">
+        <h3>Safety check</h3>
+        <ul>
+          <li>Meet in a public place.</li>
+          <li>Keep the first handoff brief.</li>
+          <li>Leave or report if anything feels off.</li>
+        </ul>
+      </div>
+      <div class="handoff-actions">
+        {% if meetup_confirmed %}
+          <p class="helptext">Meetup recorded - hope it went well!</p>
+        {% else %}
+          <form method="post" class="confirm-meetup-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="confirm_meetup">
+            <button type="submit" class="primary-action">We met - record it</button>
+          </form>
+        {% endif %}
+        <a class="primary-action" href="{% url 'dashboard' %}">Back to Dashboard</a>
+        <a class="secondary-action" href="{% url 'create_post' %}">Create another Plus One</a>
+      </div>
+    </section>
+
+    <details class="report-panel">
+      <summary>Report a safety issue</summary>
+      <form method="post" class="stacked-form" data-report-form data-confirm-submit="Report this chat? Use this only for safety concerns.">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="report">
+        <label for="report-category">Issue category</label>
+        <select id="report-category" name="category" required>
+          <option value="">Choose a category</option>
+          <option value="contact">Contact information</option>
+          <option value="harassment">Harassment</option>
+          <option value="unsafe_meeting">Unsafe meeting</option>
+          <option value="other">Other</option>
+        </select>
+        <label for="report-reason">What happened?</label>
+        <textarea id="report-reason" name="reason" maxlength="500" rows="4" required></textarea>
+        <button class="secondary-action compact danger" type="submit">Submit safety report</button>
+      </form>
+    </details>
   </aside>
 
-  <article class="panel chat-panel" data-chat-endpoint="{% url 'chat_messages' match.id %}" data-chat-status="{{ match.status }}">
+  <article class="panel chat-panel">
+    <p class="chat-phase-update" data-phase-update role="status" aria-live="polite" hidden></p>
+    <p class="chat-sync-status" data-chat-sync-status role="status" aria-live="polite" hidden></p>
     <div class="messages-list" data-chat-messages data-last-message-id="{{ last_message_id }}">
       {% for message in messages_list %}
-        <div class="bubble {% if message.is_system %}system{% elif message.sender_id == user.id %}mine{% else %}theirs{% endif %}" data-message-id="{{ message.id }}">
+        <div class="bubble {% if message.is_system %}system{% elif message.sender_id == user.id %}mine{% else %}theirs{% endif %}"
+             data-message-id="{{ message.id }}"{% if message.sender_id == user.id and message.request_id %} data-request-id="{{ message.request_id }}"{% endif %}>
           <small>
             {% if message.is_system %}Icebreaker{% elif message.sender_id == user.id %}You{% else %}Anonymous match{% endif %}
             · {{ message.created_at|date:"H:i" }}
@@ -97,29 +120,27 @@
         <p data-empty-chat>No messages yet.</p>
       {% endfor %}
     </div>
-    {% if match.status == "chatting" %}
+
+    {% if match.status == "waiting" or match.status == "chatting" %}
+    <div class="chat-compose" data-chat-compose>
       <div class="quick-replies" aria-label="Quick replies">
-        <button type="button" data-quick-reply="Where exactly should we meet?">Where exactly?</button>
-        <button type="button" data-quick-reply="I can be there in 5 minutes.">There in 5</button>
-        <button type="button" data-quick-reply="Can we meet near the entrance?">Near entrance?</button>
-        <button type="button" data-quick-reply="I am not comfortable meeting.">Not comfortable</button>
+        <button type="button" data-quick-reply="Where exactly should we meet?"{% if match.status != "chatting" %} disabled{% endif %}>Where exactly?</button>
+        <button type="button" data-quick-reply="I can be there in 5 minutes."{% if match.status != "chatting" %} disabled{% endif %}>There in 5</button>
+        <button type="button" data-quick-reply="Can we meet near the entrance?"{% if match.status != "chatting" %} disabled{% endif %}>Near entrance?</button>
+        <button type="button" data-quick-reply="I am not comfortable meeting."{% if match.status != "chatting" %} disabled{% endif %}>Not comfortable</button>
       </div>
-      <form method="post" class="opener-assist-form">
+      <form method="post" class="opener-assist-form" data-opener-form>
         {% csrf_token %}
         <input type="hidden" name="action" value="suggest_openers">
-        <button type="submit" class="secondary-action opener-assist-button">
+        <button type="submit" class="secondary-action opener-assist-button" data-chat-action="ai"{% if match.status != "chatting" %} disabled{% endif %}>
           {% if has_user_messages %}Suggest replies{% else %}Suggest openers{% endif %}
         </button>
-        <span class="helptext">
-          {% if has_user_messages %}AI suggests a next message based on this conversation. You pick and send.{% else %}AI drafts a first message from both activity cards. You pick and send.{% endif %}
-        </span>
+        <span class="helptext">AI drafts a message. You choose whether to send it.</span>
       </form>
       {% if opener_suggestions %}
-        <div class="opener-suggestions" aria-label="Suggested messages"
-             data-opener-track-url="{% url 'opener_click' match.id %}">
+        <div class="opener-suggestions" aria-label="Suggested messages" data-opener-track-url="{% url 'opener_click' match.id %}">
           {% for suggestion in opener_suggestions %}
-            <button type="button" class="opener-suggestion" data-quick-reply="{{ suggestion.text }}"
-                    data-opener-index="{{ forloop.counter0 }}">
+            <button type="button" class="opener-suggestion" data-quick-reply="{{ suggestion.text }}" data-opener-index="{{ forloop.counter0 }}"{% if match.status != "chatting" %} disabled{% endif %}>
               <span class="opener-text">{{ suggestion.text }}</span>
               {% if suggestion.reason %}<small class="opener-reason">{{ suggestion.reason }}</small>{% endif %}
             </button>
@@ -129,17 +150,30 @@
       <form method="post" class="chat-form" data-chat-form>
         {% csrf_token %}
         <input type="hidden" name="action" value="send">
-        {{ form.message }}
-        <button type="submit">Send</button>
-        <p class="chat-inline-warning" data-chat-warning hidden></p>
+        <input type="hidden" name="request_id" value="{{ request_id }}" data-request-id>
+        <input type="text" name="message" id="id_message" maxlength="500" required
+               aria-label="Chat message" placeholder="Type fast... this chat expires soon."
+               value="{{ form.message.value|default:'' }}"{% if match.status != "chatting" %} disabled{% endif %}>
+        <button type="submit"{% if match.status != "chatting" %} disabled{% endif %}>Send</button>
+        <p class="chat-inline-warning" data-chat-warning role="alert" aria-live="assertive" hidden></p>
+        <div class="request-recovery-actions" data-chat-recovery-actions hidden>
+          <button type="button" class="secondary-action compact" data-restore-chat-request>Restore uncertain message</button>
+          <button type="button" class="secondary-action compact" data-new-chat-request>Use edits as a new message</button>
+        </div>
       </form>
-    {% elif match.status == "agreed" %}
-      <p class="notice">This chat is complete. Meet safely at the agreed place and time.</p>
-    {% elif match.status == "declined" %}
-      <p class="notice">This chat was closed by a participant.</p>
-    {% else %}
-      <p class="notice">This chat is closed.</p>
+    </div>
     {% endif %}
+
+    <p class="notice" data-closed-notice{% if match.status == "waiting" or match.status == "chatting" %} hidden{% endif %}>
+      {% if match.status == "agreed" %}This chat is complete. Meet safely at the agreed place and time.{% elif match.status == "declined" %}This chat was closed by a participant.{% else %}This chat is closed.{% endif %}
+    </p>
+    <section class="draft-recovery" data-chat-draft-recovery hidden aria-label="Unconfirmed message">
+      <h2>Unconfirmed message</h2>
+      <p>Keep this text until the earlier send is confirmed. You can copy it even after the chat ends.</p>
+      <textarea rows="3" readonly data-chat-recovery-text aria-label="Unconfirmed message text"></textarea>
+      <button type="button" class="secondary-action compact" data-retry-chat-request>Check the same request again</button>
+      <p class="chat-inline-warning" data-chat-recovery-warning role="status" aria-live="polite" hidden></p>
+    </section>
   </article>
 </section>
 {% endblock %}

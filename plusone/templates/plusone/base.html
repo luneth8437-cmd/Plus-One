@@ -5,10 +5,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Plus One{% endblock %}</title>
-  <link rel="stylesheet" href="{% static 'plusone/styles.css' %}?v=20260706-mobile-chat">
-  <script defer src="{% static 'plusone/app.js' %}?v=20260706-mobile-chat"></script>
+  <link rel="stylesheet" href="{% static 'plusone/styles.css' %}?v=20260919-reliable-chat">
+  <script defer src="{% static 'plusone/app.js' %}?v=20260919-reliable-chat"></script>
 </head>
-<body>
+<body{% if user.is_authenticated %} data-session-updates-url="{% url 'session_updates' %}"{% endif %}>
   <header class="topbar">
     <a class="brand" href="{% url 'discover' %}">
       <img class="brand-logo" src="{% static 'plusone/plusone-logo.jpeg' %}" alt="Plus One">
@@ -16,7 +16,7 @@
     <nav class="nav">
       <a href="{% url 'discover' %}">Discover</a>
       <a href="{% url 'create_post' %}">Create</a>
-      <a href="{% url 'dashboard' %}">My Plus Ones{% if open_chat_count %}<span class="nav-badge">{{ open_chat_count }}</span>{% endif %}</a>
+      <a href="{% url 'dashboard' %}" data-dashboard-link>My Plus Ones{% if open_chat_count %}<span class="nav-badge">{{ open_chat_count }}</span>{% endif %}</a>
       <a href="{% url 'about' %}">About</a>
     </nav>
     <div class="identity-summary">
@@ -36,5 +36,6 @@
   <main class="page">
     {% block content %}{% endblock %}
   </main>
+  <div class="live-toast" data-live-toast role="status" aria-live="polite" aria-atomic="true" hidden></div>
 </body>
 </html>

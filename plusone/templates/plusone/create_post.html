@@ -47,8 +47,9 @@
         </div>
       </section>
     {% endif %}
-    <form method="post" class="stacked-form">
+    <form method="post" class="stacked-form" data-create-publish-form>
       {% csrf_token %}
+      <input type="hidden" name="request_id" value="{{ request_id }}" data-request-id>
       <input type="hidden" name="raw_text" value="{{ raw_text }}">
       {{ post_form.as_p }}
       {% if date_confirm_message %}
@@ -60,7 +61,12 @@
           </label>
         </section>
       {% endif %}
-      <button class="primary-action coral" name="action" value="publish">Publish temporary card</button>
+      <button class="primary-action coral" name="action" value="publish" data-publish-submit>Publish temporary card</button>
+      <p class="form-status" data-publish-status role="status" aria-live="polite" hidden></p>
+      <div class="request-recovery-actions" data-publish-recovery-actions hidden>
+        <button type="button" class="secondary-action compact" data-restore-publish-request>Restore uncertain request</button>
+        <button type="button" class="secondary-action compact" data-new-publish-request>Use edits as a new request</button>
+      </div>
     </form>
   </article>
 

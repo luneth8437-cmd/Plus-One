@@ -5,7 +5,7 @@
   <div>
     <p class="eyebrow">Decision queue</p>
     <h1>Pick one plan. Decide fast.</h1>
-    <p class="lead">Browse live campus plans with a temporary identity. Skip what is not right, or join to open a five-minute anonymous vibe chat.</p>
+    <p class="lead">Browse live campus plans with a temporary identity. Join to enter an anonymous waiting room; the five-minute vibe chat begins when you are both there.</p>
   </div>
   <a class="primary-action" href="{% url 'create_post' %}">Create a Plus One</a>
 </section>
@@ -45,7 +45,7 @@
     <div class="match-dialog">
       <p class="eyebrow">Match</p>
       <h2>It's a vibe.</h2>
-      <p>Your 5-minute anonymous chat for <strong>{{ matched_match.post.title }}</strong> is open. Decide fast, meet safely, and keep it casual.</p>
+      <p>Your anonymous waiting room for <strong>{{ matched_match.post.title }}</strong> is open. The five-minute chat starts when you are both there.</p>
       <div class="modal-actions">
         <a class="primary-action" href="{% url 'chat' matched_match.id %}">Open chat</a>
         <a class="details" href="{% url 'discover' %}">Keep swiping</a>
