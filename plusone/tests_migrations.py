@@ -9,7 +9,7 @@ from django.utils import timezone
 
 class ReliableLifecycleMigrationCompatibilityTests(TransactionTestCase):
     migrate_from = [("plusone", "0009_productevent_meetup_confirmed")]
-    migrate_to = [("plusone", "0013_idempotent_rate_limit")]
+    migrate_to = [("plusone", "0014_activitypost_expected_end_time")]
 
     def setUp(self):
         super().setUp()
@@ -107,6 +107,7 @@ class ReliableLifecycleMigrationCompatibilityTests(TransactionTestCase):
 
         self.assertIsNone(profile.last_seen_at)
         self.assertEqual(post.expire_time, self.post_expiry)
+        self.assertIsNone(post.expected_end_time)
         self.assertIsNone(post.request_id)
         self.assertEqual(post.request_fingerprint, "")
         self.assertEqual(match.status, "chatting")

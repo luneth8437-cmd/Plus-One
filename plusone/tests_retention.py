@@ -50,13 +50,22 @@ class RetentionFixtureMixin:
         user.refresh_from_db()
         return user, profile
 
-    def make_post(self, user, *, start_time=None, expire_time=None, status=ActivityPost.Status.CANCELLED):
+    def make_post(
+        self,
+        user,
+        *,
+        start_time=None,
+        expected_end_time=None,
+        expire_time=None,
+        status=ActivityPost.Status.CANCELLED,
+    ):
         return ActivityPost.objects.create(
             user=user,
             title=f"Retention post for {user.username}",
             activity_type=ActivityPost.ActivityType.OTHER,
             location=self.location,
             start_time=start_time or self.now - timedelta(days=2),
+            expected_end_time=expected_end_time,
             expire_time=expire_time or self.now - timedelta(days=1),
             status=status,
         )
@@ -208,6 +217,36 @@ class AnonymousIdentityRetentionTests(RetentionFixtureMixin, TestCase):
         self.assertFalse(SafetyReport.objects.filter(pk=report.pk).exists())
         self.assertTrue(ChatMessage.objects.filter(pk=message.pk).exists())
         self.assertEqual(get_user_model().objects.filter(pk__in=[poster.pk, swiper.pk]).count(), 2)
+
+    def test_expected_end_protects_both_participants_until_twenty_four_hours_later(self):
+        poster, _ = self.make_user("anon_long_meet_poster")
+        swiper, _ = self.make_user("anon_long_meet_swiper")
+        post = self.make_post(
+            poster,
+            start_time=self.now - timedelta(days=2),
+            expected_end_time=self.now - timedelta(hours=23),
+            expire_time=self.now - timedelta(days=2),
+            status=ActivityPost.Status.MATCHED,
+        )
+        Match.objects.create(post=post, poster=poster, swiper=swiper, status=Match.Status.AGREED)
+
+        self.assertEqual(cleanup_anonymous_users(dry_run=False), 0)
+        self.assertEqual(get_user_model().objects.filter(pk__in=[poster.pk, swiper.pk]).count(), 2)
+
+    def test_expected_end_outside_twenty_four_hours_allows_cleanup(self):
+        poster, _ = self.make_user("anon_ended_poster")
+        swiper, _ = self.make_user("anon_ended_swiper")
+        post = self.make_post(
+            poster,
+            start_time=self.now - timedelta(days=3),
+            expected_end_time=self.now - timedelta(hours=25),
+            expire_time=self.now - timedelta(days=3),
+            status=ActivityPost.Status.MATCHED,
+        )
+        Match.objects.create(post=post, poster=poster, swiper=swiper, status=Match.Status.AGREED)
+
+        self.assertEqual(cleanup_anonymous_users(dry_run=False), 2)
+        self.assertEqual(get_user_model().objects.filter(pk__in=[poster.pk, swiper.pk]).count(), 0)
 
     def test_user_cleanup_is_bounded_and_repeatable(self):
         users = [self.make_user(f"anon_batch_{index}")[0] for index in range(3)]

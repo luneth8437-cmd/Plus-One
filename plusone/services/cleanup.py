@@ -37,6 +37,31 @@ def _report_retention_days(value):
     return value
 
 
+def _agreement_protected_q(cutoff, prefix=""):
+    """Protect AGREED matches until 24 hours after the expected meetup end.
+
+    Historical posts have no expected end, so they retain the previous
+    start-time-based boundary instead of receiving fabricated data.
+    """
+    status = f"{prefix}status"
+    expected_end = f"{prefix}post__expected_end_time"
+    start = f"{prefix}post__start_time"
+    return Q(**{status: Match.Status.AGREED}) & (
+        Q(**{f"{expected_end}__gt": cutoff})
+        | Q(**{f"{expected_end}__isnull": True, f"{start}__gt": cutoff})
+    )
+
+
+def _agreement_outside_protection_q(cutoff, prefix=""):
+    status = f"{prefix}status"
+    expected_end = f"{prefix}post__expected_end_time"
+    start = f"{prefix}post__start_time"
+    return Q(**{status: Match.Status.AGREED}) & (
+        Q(**{f"{expected_end}__lte": cutoff})
+        | Q(**{f"{expected_end}__isnull": True, f"{start}__lte": cutoff})
+    )
+
+
 def _stale_identity_filter(cutoff):
     fallback_is_stale = Q(last_login__lt=cutoff) | Q(
         last_login__isnull=True,
@@ -63,11 +88,7 @@ def _with_protection_annotations(queryset, now, report_cutoff):
             Match.objects.filter(participant, status__in=Match.LIVE_STATUSES)
         ),
         cleanup_has_current_agreement=Exists(
-            Match.objects.filter(
-                participant,
-                status=Match.Status.AGREED,
-                post__start_time__gt=agreed_since,
-            )
+            Match.objects.filter(participant).filter(_agreement_protected_q(agreed_since))
         ),
         cleanup_has_unresolved_report=Exists(
             SafetyReport.objects.filter(
@@ -130,7 +151,7 @@ def _is_protected_locked(user_id, now, report_cutoff):
     # terminal; this keeps dry runs mutation-free and commit mode conservative.
     if Match.objects.filter(participant).filter(
         Q(status__in=Match.LIVE_STATUSES)
-        | Q(status=Match.Status.AGREED, post__start_time__gt=agreed_since)
+        | _agreement_protected_q(agreed_since)
     ).exists():
         return True
 
@@ -202,9 +223,9 @@ def _delete_ids(model, ids):
 
 def _report_message_candidates(now, report_cutoff, batch_size):
     agreed_since = now - timedelta(hours=24)
-    terminal_match = Q(match__status__in=[Match.Status.DECLINED, Match.Status.EXPIRED]) | Q(
-        match__status=Match.Status.AGREED,
-        match__post__start_time__lte=agreed_since,
+    terminal_match = Q(match__status__in=[Match.Status.DECLINED, Match.Status.EXPIRED]) | _agreement_outside_protection_q(
+        agreed_since,
+        prefix="match__",
     )
     messages = ChatMessage.objects.filter(
         terminal_match,
@@ -216,7 +237,8 @@ def _report_message_candidates(now, report_cutoff, batch_size):
 def _match_evidence_is_protected(match, now, report_cutoff):
     if match.status in Match.LIVE_STATUSES:
         return True
-    if match.status == Match.Status.AGREED and match.post.start_time > now - timedelta(hours=24):
+    meetup_end = match.post.expected_end_time or match.post.start_time
+    if match.status == Match.Status.AGREED and meetup_end > now - timedelta(hours=24):
         return True
     return False
 

@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Plus One{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'plusone/styles.css' %}?v=20260919-reliable-chat">
-  <script defer src="{% static 'plusone/app.js' %}?v=20260919-reliable-chat"></script>
+  <script defer src="{% static 'plusone/app.js' %}?v=20260921-expected-end"></script>
 </head>
 <body{% if user.is_authenticated %} data-session-updates-url="{% url 'session_updates' %}"{% endif %}>
   <header class="topbar">

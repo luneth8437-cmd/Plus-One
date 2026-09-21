@@ -58,6 +58,8 @@ class PlusOneTestCase(TestCase):
 
     def test_create_activity_post_saves_fields(self):
         self.client.force_login(self.poster)
+        start_time = (timezone.localtime() + timedelta(hours=2)).replace(second=0, microsecond=0)
+        expected_end_time = start_time + timedelta(hours=2)
         response = self.client.post(
             reverse("create_post"),
             {
@@ -67,12 +69,60 @@ class PlusOneTestCase(TestCase):
                 "description": "Focused session.",
                 "activity_type": ActivityPost.ActivityType.STUDY,
                 "location": self.location.id,
-                "start_time": (timezone.localtime() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M"),
+                "start_time": start_time.strftime("%Y-%m-%dT%H:%M"),
+                "expected_end_time": expected_end_time.strftime("%Y-%m-%dT%H:%M"),
                 "expire_minutes": "30",
             },
         )
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(ActivityPost.objects.filter(title="Study sprint", user=self.poster).exists())
+        post = ActivityPost.objects.get(title="Study sprint", user=self.poster)
+        self.assertEqual(post.expected_end_time, expected_end_time)
+
+    def test_create_activity_post_defaults_end_to_one_hour_after_start(self):
+        self.client.force_login(self.poster)
+        start_time = (timezone.localtime() + timedelta(hours=2)).replace(second=0, microsecond=0)
+
+        response = self.client.post(
+            reverse("create_post"),
+            {
+                "action": "publish",
+                "request_id": str(uuid4()),
+                "title": "One-hour study sprint",
+                "description": "Use the default expected duration.",
+                "activity_type": ActivityPost.ActivityType.STUDY,
+                "location": self.location.id,
+                "start_time": start_time.strftime("%Y-%m-%dT%H:%M"),
+                "expected_end_time": "",
+                "expire_minutes": "30",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        post = ActivityPost.objects.get(title="One-hour study sprint")
+        self.assertEqual(post.expected_end_time, start_time + timedelta(hours=1))
+
+    def test_create_activity_post_rejects_end_before_start(self):
+        self.client.force_login(self.poster)
+        start_time = (timezone.localtime() + timedelta(hours=2)).replace(second=0, microsecond=0)
+
+        response = self.client.post(
+            reverse("create_post"),
+            {
+                "action": "publish",
+                "request_id": str(uuid4()),
+                "title": "Invalid time range",
+                "description": "The end cannot precede the start.",
+                "activity_type": ActivityPost.ActivityType.STUDY,
+                "location": self.location.id,
+                "start_time": start_time.strftime("%Y-%m-%dT%H:%M"),
+                "expected_end_time": (start_time - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M"),
+                "expire_minutes": "30",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Expected end time must be after the start time.")
+        self.assertFalse(ActivityPost.objects.filter(title="Invalid time range").exists())
 
     def test_create_post_invalid_location_rerenders_preview(self):
         self.client.force_login(self.poster)

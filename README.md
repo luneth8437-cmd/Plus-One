@@ -7,8 +7,8 @@ Plus One is an AI-assisted anonymous campus activity matcher. Create a temporary
 
 Live app: https://plusone-ub3w.onrender.com/
 
-> The app runs on Render's free tier. If the first request takes up to a
-> minute, the instance is waking from an idle period.
+> The hosted service is separate from the repository. During a staged rollout,
+> the live build or database may temporarily lag behind the default branch.
 
 GitHub repo: https://github.com/luneth8437-cmd/Plus-One
 
@@ -16,9 +16,9 @@ If you find the idea useful, a GitHub Star helps other people discover the proje
 
 ## Evidence and Metrics
 
-Every AI capability ships with a benchmark, adversarial tests, and product
-analytics. Latest measured results (2026-07-15, reproducible via
-`manage.py evaluate_ai` and `manage.py funnel_report`):
+AI-assisted surfaces ship with regression benchmarks, adversarial tests, and
+product analytics. The table below is the committed 2026-07-15 benchmark
+snapshot, not a claim about live traffic or the current hosted deployment:
 
 | Area | Result |
 | --- | --- |
@@ -35,10 +35,11 @@ Details: [evaluation runs](docs/product_validation/eval_results/),
 
 ## Why Plus One
 
-Campus plans often fail because students do not know who is free right now, who wants the same activity, or whether the vibe is safe enough to meet. Plus One turns a casual sentence into a temporary campus card, matches one interested student, opens a short anonymous chat, and only reveals a meet handoff after both people agree.
+Campus plans often fail because students do not know who is free right now, who wants the same activity, or whether the vibe is safe enough to meet. Plus One turns a casual sentence into a temporary campus card, matches one interested student, waits until both people are present, opens a fixed five-minute anonymous chat, and only reveals a meet handoff after both people agree.
 
 ## Tech Stack
 
+- Python 3.13 runtime
 - Django 5
 - PostgreSQL
 - DeepSeek API through an OpenAI-compatible client
@@ -48,22 +49,24 @@ Campus plans often fail because students do not know who is free right now, who 
 
 ## Screenshots
 
-### Full Flow Demo
+### Desktop Product Walkthrough
 
-![Plus One two-student flow: Student A creates a card, Student B matches, both chat, and both agree to meet](docs/screenshots/plus-one-flow.gif)
+![Plus One desktop flow: one student publishes, another matches, waits for both people to enter, chats, agrees, and receives the meet handoff](docs/screenshots/plus-one-flow.gif)
 
-### Mobile Two-Student Flow
+### Mobile Product Walkthrough
 
-![Plus One mobile flow: Student A creates a temporary card, Student B discovers it, they chat, and both agree to meet](docs/screenshots/plus-one-mobile-flow.gif)
+![Plus One mobile flow: publish, discover, enter the waiting room, start the timed chat, agree, and review the handoff](docs/screenshots/plus-one-mobile-flow.gif)
 
 ## Product Capabilities
 
 - Anonymous session identities with no registration or password.
-- Time-limited campus activity cards created from structured fields or casual text.
-- Discovery filters, swipe actions, instant matches, and five-minute private chats with lightweight polling.
+- Time-limited campus activity cards with an expected meetup window, created from structured fields or casual text.
+- Discovery filters and one-to-one matching, followed by a waiting room until both chat pages are recently present.
+- A fixed five-minute private chat with ordered message sync, duplicate protection, bounded retries, and visible connection recovery.
 - Meet handoff after both people agree, with place, time, and a short safety reminder.
-- AI-assisted post parsing and suggestions with deterministic fallback; production safety moderation fails closed when unavailable.
-- Dashboard for active, matched, expired, and cancelled plans.
+- AI-assisted post parsing and optional suggestions with deterministic fallback; production safety moderation fails closed and preserves input when unavailable.
+- Participant reporting during waiting, chat, and completed handoffs, plus an admin review queue.
+- Dashboard and in-site updates for waiting, chatting, agreed, expired, and cancelled plans.
 
 ## Product Validation
 
@@ -84,7 +87,9 @@ Plus One includes a validation workspace for turning prototype feedback into pro
 - `/create/` LLM-assisted post creation with live card preview.
 - `/posts/<id>/edit/` owner-only post editing and cancellation.
 - `/dashboard/` dashboard for active, matched, expired, and cancelled posts.
-- `/chat/<match_id>/` five-minute anonymous chat with near-real-time message refresh and meet handoff.
+- `/chat/<match_id>/` waiting room, foreground-presence activation, five-minute anonymous chat, reporting, and meet handoff.
+- `/session/updates/` privacy-limited in-site updates for new and pending matches.
+- `/healthz/` process liveness and `/readyz/` database readiness.
 
 ## Product Flow
 
@@ -93,7 +98,9 @@ Create a temporary card
   -> Review structured details
   -> Publish to Discover
   -> Another anonymous user shows interest
-  -> Match opens a short chat
+  -> Match reserves one slot and opens a waiting room
+  -> Both chat pages become recently present
+  -> One fixed five-minute chat starts
   -> Both users agree
   -> Meet handoff appears with safety reminders
 ```
@@ -105,10 +112,15 @@ Browser
   -> Django templates + static CSS/JS
   -> Django views, services, and selectors
   -> PostgreSQL
-  -> DeepSeek API for parsing, icebreakers, and moderation
+  -> Atomic presence-based chat activation and rule-based icebreaker
+  -> DeepSeek/OpenAI-compatible API for parsing, optional suggestions, and external moderation
 ```
 
 ## Setup
+
+Python 3.13 is the repository's tested deployment runtime. Render reads the
+root `.python-version`; local Python 3.14 is also covered by the locked
+dependencies.
 
 ```bash
 python3 -m venv .venv
@@ -145,7 +157,7 @@ the reset option is disabled whenever `DEBUG=False`.
 If `DEEPSEEK_API_KEY` is set, the app uses DeepSeek through the OpenAI-compatible API for:
 
 - natural-language activity parsing,
-- icebreaker generation,
+- optional opening suggestions,
 - safety moderation.
 
 Set the key in your shell before running Django:
@@ -209,10 +221,8 @@ To run one hosted instance that keeps `DEEPSEEK_API_KEY` on the server and lets 
 
 ## Roadmap
 
-- Add real campus authentication or verified student email mode.
-- Add richer reporting and moderation review tools.
-- Add notification support for pending chats.
-- Add mobile-first polish for repeated daily use.
+- Add verified campus authentication or reputation without exposing identity during matching.
+- Add notification support when users are outside the active site.
 - Add analytics for funnel health without exposing private chat content.
 
 ## Core Flow
@@ -223,10 +233,10 @@ To run one hosted instance that keeps `DEEPSEEK_API_KEY` on the server and lets 
 4. Publish.
 5. Use another browser session, or choose **Start fresh identity** on Session, to act as a separate temporary identity.
 6. Swipe interested.
-7. Confirm the match modal.
-8. Enter the five-minute anonymous chat.
-9. Send a message and agree to meet.
-10. When both people agree, review the meet handoff and safety reminder.
+7. Confirm the match modal and enter the waiting room.
+8. Open the same match from the first browser; only then does the fixed five-minute chat begin.
+9. Send messages, retry safely after a lost response if needed, and agree to meet.
+10. When both people agree, review the meet handoff, safety reminder, and report option.
 11. View My Plus Ones dashboard.
 
 ## Tests
@@ -235,4 +245,4 @@ To run one hosted instance that keeps `DEEPSEEK_API_KEY` on the server and lets 
 .venv/bin/python manage.py test
 ```
 
-Current test coverage includes anonymous session identity creation, post creation, identity reset, unsafe post blocking, editing/cancelling posts, discovery filtering rules, swipe/match behavior, chat permissions, chat expiry, moderation logging, and dashboard status separation.
+The acceptance suite contains 192 Django tests across SQLite and PostgreSQL, JavaScript reliability tests, migration checks, and a two-browser Chromium flow covering expected meetup time, WAITING activation, cross-client messages, weak-network replay, agreement, and post-handoff reporting. CI uses isolated test databases and never uses production data.

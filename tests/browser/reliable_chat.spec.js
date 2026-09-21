@@ -37,10 +37,13 @@ test("two isolated users complete a reliable waiting, chat, replay, agreement, a
     await poster.locator("#id_activity_type").selectOption("sports");
     await poster.locator("#id_location").selectOption({ label: "Campus Sports Hall (Central Campus)" });
     await poster.locator("#id_start_time").fill(shanghaiDateTime());
+    await expect(poster.locator("#id_expected_end_time")).toBeVisible();
+    await poster.locator("#id_expected_end_time").fill(shanghaiDateTime(4));
     await poster.locator("#id_expire_minutes").fill("45");
     await poster.getByRole("button", { name: "Publish temporary card" }).click();
     await expect(poster).toHaveURL(/\/posts\/\d+\/$/);
     await expect(poster.getByRole("heading", { name: title })).toBeVisible();
+    await expect(poster.locator(".chips")).toContainText("Ends");
 
     await joiner.goto("/discover/");
     const card = joiner.locator("article.activity-card", { hasText: title });

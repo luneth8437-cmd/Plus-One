@@ -30,7 +30,16 @@ class CampusLocationAdmin(admin.ModelAdmin):
 
 @admin.register(ActivityPost)
 class ActivityPostAdmin(admin.ModelAdmin):
-    list_display = ("title", "user", "activity_type", "location", "start_time", "expire_time", "status")
+    list_display = (
+        "title",
+        "user",
+        "activity_type",
+        "location",
+        "start_time",
+        "expected_end_time",
+        "expire_time",
+        "status",
+    )
     list_filter = ("activity_type", "status", "location")
     search_fields = ("title", "description", "user__username")
 

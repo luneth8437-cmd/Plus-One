@@ -12,7 +12,7 @@
   <aside class="panel chat-context">
     <p class="eyebrow">Anonymous vibe chat</p>
     <h1>{{ match.post.title }}</h1>
-    <p>{{ match.post.location.name }} · {{ match.post.start_time|date:"M j, H:i" }}</p>
+    <p>{{ match.post.location.name }} · {{ match.post.start_time|date:"M j, H:i" }}{% if match.post.expected_end_time %}–{{ match.post.expected_end_time|date:"M j, H:i" }}{% endif %}</p>
     <p class="chat-decision-copy" data-phase-guidance>
       {% if match.status == "waiting" %}
         Waiting for both people to arrive. Chat starts when you are both here.
@@ -57,7 +57,7 @@
       <dl>
         <div><dt>Plan</dt><dd>{{ match.post.title }}</dd></div>
         <div><dt>Meet at</dt><dd>{{ match.post.location.name }}</dd></div>
-        <div><dt>Time</dt><dd>{{ match.post.start_time|date:"M j, H:i" }}</dd></div>
+        <div><dt>Time</dt><dd>{{ match.post.start_time|date:"M j, H:i" }}{% if match.post.expected_end_time %}–{{ match.post.expected_end_time|date:"M j, H:i" }}{% endif %}</dd></div>
       </dl>
       <div class="handoff-safety">
         <h3>Safety check</h3>

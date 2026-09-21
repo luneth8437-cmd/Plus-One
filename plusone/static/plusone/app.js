@@ -215,6 +215,7 @@
     const activityInput = document.getElementById("id_activity_type");
     const locationInput = document.getElementById("id_location");
     const startInput = document.getElementById("id_start_time");
+    const endInput = document.getElementById("id_expected_end_time");
     const expireInput = document.getElementById("id_expire_minutes");
     const previewTitle = document.querySelector("[data-post-preview-title]");
     if (!previewTitle) return;
@@ -224,6 +225,8 @@
     document.querySelector("[data-post-preview-activity]").textContent = previewActivityLabel(activityInput);
     document.querySelector("[data-post-preview-location]").textContent = previewLocationLabel(locationInput);
     document.querySelector("[data-post-preview-time]").textContent = previewStartTimeLabel(startInput?.value);
+    const previewEnd = document.querySelector("[data-post-preview-end]");
+    if (previewEnd) previewEnd.textContent = endInput?.value ? `Ends ${previewStartTimeLabel(endInput.value)}` : "Expected end time";
     document.querySelector("[data-post-preview-expire]").textContent = expireInput?.value || "45";
     const previewCard = previewTitle.closest(".activity-card");
     if (previewCard) {
@@ -876,7 +879,7 @@
     setupPresence();
     setupSessionPolling();
     setupSubmitConfirms();
-    ["id_title", "id_description", "id_activity_type", "id_location", "id_start_time", "id_expire_minutes"].forEach((id) => {
+    ["id_title", "id_description", "id_activity_type", "id_location", "id_start_time", "id_expected_end_time", "id_expire_minutes"].forEach((id) => {
       const field = document.getElementById(id);
       field?.addEventListener("input", updateCreatePreview);
       field?.addEventListener("change", updateCreatePreview);

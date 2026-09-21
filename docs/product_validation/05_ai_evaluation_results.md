@@ -2,7 +2,7 @@
 
 Goal: evaluate whether AI-assisted parsing and safety moderation are useful enough for the MVP, and decide where deterministic guardrails must stay in the product.
 
-Current evidence sources: `03_usability_test_report.md` (10-session usability test of the create-match-chat-agree-handoff-dashboard flow) and the automated benchmark in `plusone/ai_services/eval_cases.py`, run via `python manage.py evaluate_ai` (first measured baseline: 2026-07-14, report in `eval_results/2026-07-14-fallback.md`).
+Current evidence sources: `03_usability_test_report.md` (10-session usability test of the create-match-chat-agree-handoff-dashboard flow), the automated benchmark in `plusone/ai_services/eval_cases.py`, and the production-boundary regressions in `plusone/tests_ai_safety.py`.
 
 The latest committed comparison is from 2026-07-15: the deterministic fallback (`eval_results/2026-07-15-fallback.md`) and the full LLM pipeline with guardrails (`eval_results/2026-07-15-llm.md`, deepseek-v4-flash).
 
@@ -67,7 +67,7 @@ Product reading: on this regression set the LLM adds ~1.4s median latency and pe
 | Incorrect date | U6-U10 requested July 8 but received Jul 7. | High | Compare parsed date to original text and show a date-confirmation warning. |
 | Invalid numeric field | U3 received 1440-minute expiry. | Medium-high | Cap generated expiry values and show a clear inline publish blocker. |
 | Over-trust in completed fields | U6 trusted the draft because time was filled. | High | Treat filled AI fields as provisional until the review validation passes. |
-| Moderation uncertainty | Safety UX was understandable, but moderation recall was not benchmarked here. | Medium | Run a separate safety sample set before stronger launch claims. |
+| Moderation uncertainty | The 12-case rules sample is small and is not the production external-provider path. | Medium | Keep production fail-closed, retain provider timeout/malformed-response tests, and expand externally reviewed safety samples before stronger claims. |
 
 ## Product Decision From Results
 
@@ -77,7 +77,7 @@ Product reading: on this regression set the LLM adds ~1.4s median latency and pe
 | The review step must be defensive. | Users completed the flow only when they noticed or fixed draft issues. | The product should block invalid cards with clear inline messages instead of silently relying on user vigilance. |
 | Parsed date/time must be validated against original text. | U6-U10 exposed a repeated July 8 to Jul 7 shift. | Date mistakes are high-risk because users may trust a filled time field. |
 | Expiry values need bounds. | U3 saw a 1440-minute expiry. | A temporary Plus One card should not accept extreme AI-generated expiry values without correction. |
-| Safety moderation still needs a dedicated benchmark. | Usability testing found 0 critical safety confusion cases, but did not systematically test moderation recall. | UX safety clarity and moderation accuracy are separate validation questions. |
+| Production moderation must fail closed. | Rules scored 12/12 on a small sample, while provider availability and output validity are separate risks. | Missing, timed-out, or malformed provider decisions preserve input and block the write; DEBUG rules are not a production substitute. |
 
 ## Required Guardrails Before Broader Launch
 
@@ -88,13 +88,14 @@ Product reading: on this regression set the LLM adds ~1.4s median latency and pe
 5. Cap `expire_minutes` to the product range and explain the correction inline.
 6. Keep deterministic fallback and validation even when the LLM call succeeds.
 7. Keep manual review before publish as a core product rule.
+8. Keep production moderation fail-closed; rules mode is only for explicit DEBUG/test environments.
 
 ## Benchmark Status and Next Steps
 
 | Benchmark area | Status |
 | --- | --- |
 | Natural-language card parsing | Done in both modes: 19 cases, LLM vs fallback compared with latency (see comparison section). Next: grow the case set as new failure types appear in production logs. |
-| Safety moderation | Done (rule layer): 12 cases, risky + benign controls, full confusion matrix. Next: expand sample and benchmark the LLM moderation path separately. |
+| Safety moderation | Rule sample: 12 cases with risky + benign controls. Provider failure/timeout/malformed paths are regression-tested and fail closed. Next: expand externally reviewed samples and benchmark live-provider quality separately. |
 | Usability-linked regression cases | Done: U1-U5 missing-time, U6-U10 date-shift, and U3 expiry cases are all encoded in `eval_cases.py` and pass. |
 | Prompt versioning | Ongoing: every prompt change should rerun `evaluate_ai --report` and commit the report to `eval_results/` so accuracy deltas are traceable per version. |
 

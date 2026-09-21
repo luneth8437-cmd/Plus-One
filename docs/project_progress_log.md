@@ -1928,3 +1928,76 @@ Open boundaries:
 - Existing cards have a start time but no end time. Current cleanup protection is start+24h, which is not literally end+24h. Asked the user whether to add expected end time or accept start+24h; no answer at this gate. Production cleanup must stay disabled until this is settled.
 - Render account plan, expiry and deployed SHA remain unknown behind login. Production backup/restore, smoke test, dry-run and paid plan changes were not executed.
 - Local implementation and documented review gates are delivered; no GitHub push, production migration, automatic robot demo, paid purchase or production cleanup occurred in this turn.
+
+## 2026-09-21: GitHub Product Narrative and Walkthrough Refresh
+
+Problem:
+
+- After the reliability release reached GitHub, the README and walkthrough GIFs still described the pre-WAITING flow as an instant match that immediately opened a five-minute chat.
+- Older product-decision material did not clearly separate safe rule fallback for editable drafts/suggestions from fail-closed production moderation.
+
+Changes:
+
+- Updated README capabilities, routes, architecture, core flow, roadmap and test summary to reflect WAITING, foreground activation, fixed chat timing, idempotent recovery, reporting, readiness checks and the 187-test acceptance suite.
+- Relabeled dated AI/funnel metrics as historical benchmark snapshots rather than current live-product outcomes.
+- Updated validation/decision/model-boundary documents so production moderation failure preserves input and blocks the write; DEBUG rules remain local/test-only.
+- Replaced both repository GIFs with nine-stage walkthroughs captured from the current product: create, publish, discover, match, one-sided waiting, activated chat, one-sided agreement, mutual handoff and dashboard.
+
+Verification and boundaries:
+
+- Captured the walkthrough with two isolated browser contexts against a fresh SQLite database under `/private/tmp`; no production or user data was read or written.
+- One capture run logged a transient SQLite `database is locked` response during overlapping presence writes; client retry recovered and the walkthrough completed. This is documented as a SQLite capture limitation rather than hidden, and the PostgreSQL CI browser flow remained green.
+- Visual contact-sheet review confirmed desktop 1100x653 and mobile 390x906 frames include the new waiting state, consent state and safety/report controls.
+- GitHub Actions run `35554561559` for commit `7abe8d3` completed successfully in both SQLite and PostgreSQL jobs, including the PostgreSQL browser flow and deterministic AI artifact.
+- This documentation/screenshot refresh is local and uncommitted at this point. It has not been pushed, and it does not prove a new Render deployment or production migration.
+
+## 2026-09-21: Deployment Documentation and Runtime Pin
+
+Problem:
+
+- The Render guide named a database that did not match `render.yaml`, suggested `main` even though the current delivery source is `deepseek-api`, and did not distinguish a new Blueprint from updating the existing hosted service.
+- Render's default Python runtime can change over time, while CI and the locked dependencies are validated on Python 3.13.
+- The module/test inventory still described the retired production moderation fallback, and the dated delivery guide had no follow-up recording the successful remote CI run.
+
+Changes:
+
+- Added `.python-version` with Python 3.13 and documented the runtime boundary in README, the technical specification, and the Render guide.
+- Corrected the Render resource name, branch instructions, existing-service warning, preflight checks and post-deploy health/readiness interpretation.
+- Renamed the scheduled workflow to `Live service health check`, removed token permissions, added a three-minute job limit, and clarified that it is infrastructure monitoring rather than an automatic product demo or durability guarantee.
+- Corrected the moderation descriptions in the module/test inventory and added the verified `deepseek-api` commit/CI run to the rollout document without claiming a Render deployment.
+
+Verification and boundaries:
+
+- This round changes documentation, runtime selection metadata and workflow safety metadata; it does not alter Django product behavior or production data.
+- `render.yaml`, CI and live-health workflow files parsed successfully as YAML; local Markdown links and `git diff --check` passed.
+- The selected system Python is now 3.13.5 as intended, but its global environment has no Django installed. The older temporary Python 3.14 validation environment had been partially cleaned by the operating system, so Django checks were not rerun in this documentation-only round. The last pushed application commit remains covered by successful remote CI; these local documentation/workflow changes still require their own CI after push.
+- The ten-minute health/readiness schedule remains in place. It now fails visibly on HTTP errors, but does not prove uptime, prevent database expiry or replace backups.
+- All changes remain local and uncommitted. No GitHub push, Render deployment, database migration, plan purchase or production smoke test occurred in this round.
+
+## 2026-09-21: Expected Meetup End and Retention Boundary
+
+Problem:
+
+- The approved retention rule protects agreed participants until 24 hours after a meetup ends, but cards only stored a start time. Cleanup therefore used start+24h and could release a long meetup too early.
+- The unresolved boundary was already documented and production cleanup remained disabled pending a real end-time model.
+
+Changes:
+
+- Added nullable, indexed `ActivityPost.expected_end_time` in incremental migration `0014`. Existing rows remain `NULL`; no historical end times are fabricated.
+- Added an optional expected-end field to create/edit flows. New and edited cards default to one hour after start when blank, reject an end at or before the start, include the value in idempotency fingerprints, and display the range on discovery, detail, dashboard, chat and handoff surfaces.
+- Preserved exact replay for pre-upgrade publish requests whose payload never contained the new field. The compatibility digest is accepted only when the field is absent and every legacy value is unchanged; altered content or a new-field payload still returns 409.
+- Updated cleanup annotations, locked rechecks and terminal evidence selection to protect AGREED participants and evidence until expected-end+24h. Legacy `NULL` records preserve the prior start+24h fallback.
+- Added the field to local sample data, opening-assistant context, admin inventory, browser coverage, engineering documentation and current walkthrough GIFs. Bumped the JavaScript cache key so deployed browsers do not retain the older preview behavior.
+
+Verification:
+
+- Python syntax, JavaScript syntax, migration drift and Django system checks passed.
+- Focused SQLite migration/form/retention gate: 95 tests passed.
+- Full SQLite: 192 tests passed with four PostgreSQL-only concurrency cases skipped. Full isolated PostgreSQL 16: 192 tests passed with no skips.
+- JavaScript reliability: 8/8 passed. Chromium two-session flow passed and explicitly verified the expected-end input and published range before completing WAITING, chat, weak-network recovery, agreement and reporting.
+- Refreshed nine-frame desktop (1100x653) and mobile (390x906) walkthroughs and reviewed contact sheets. The capture used a disposable SQLite database; overlapping presence produced the previously documented transient SQLite lock, client recovery completed, and the independent PostgreSQL suite stayed green.
+
+Environment and delivery boundaries:
+
+- Dependencies were installed only in `/private/tmp/plusone-round3-venv`. The isolated local PostgreSQL cluster on 127.0.0.1:55439 was restarted for tests and stopped afterward. No production or user database was accessed.
+- This migration and all earlier documentation/runtime changes remain local and uncommitted. No GitHub push, Render deployment, production migration or production cleanup occurred.

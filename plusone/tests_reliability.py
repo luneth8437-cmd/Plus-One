@@ -40,9 +40,12 @@ class Fixtures:
         return set_presence(match.pk, self.guest, True)
 
     def publish_data(self):
+        start_time = (timezone.localtime() + timedelta(hours=2)).replace(second=0, microsecond=0)
         return {"action": "publish", "request_id": str(uuid4()), "title": "Lunch together", "description": "Public canteen",
             "activity_type": "food", "location": self.location.pk,
-            "start_time": (timezone.localtime() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M"), "expire_minutes": "30"}
+            "start_time": start_time.strftime("%Y-%m-%dT%H:%M"),
+            "expected_end_time": (start_time + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"),
+            "expire_minutes": "30"}
 
 
 @override_settings(DEBUG=True, PLUSONE_MODERATION_MODE="rules")
@@ -208,6 +211,28 @@ class RequestReliabilityTests(Fixtures, TestCase):
         moderate.assert_not_called()
         self.assertEqual(ProductEvent.objects.filter(name="publish_card").count(), 1)
         data["description"] = "changed"
+        self.assertEqual(self.client.post(reverse("create_post"), data).status_code, 409)
+
+    def test_pre_end_time_request_replays_only_when_legacy_payload_is_unchanged(self):
+        from plusone.services.posts import legacy_publish_fingerprint
+
+        self.client.force_login(self.poster)
+        data = self.publish_data()
+        data.pop("expected_end_time")
+        data["location"] = str(data["location"])
+        self.post.request_id = data["request_id"]
+        self.post.request_fingerprint = legacy_publish_fingerprint(data)
+        self.post.save(update_fields=["request_id", "request_fingerprint"])
+
+        with patch("plusone.views.moderate_activity_form") as moderate:
+            replay = self.client.post(reverse("create_post"), data)
+        self.assertRedirects(replay, reverse("post_detail", args=[self.post.pk]))
+        moderate.assert_not_called()
+
+        data["description"] = "changed"
+        self.assertEqual(self.client.post(reverse("create_post"), data).status_code, 409)
+        data["description"] = "Public canteen"
+        data["expected_end_time"] = ""
         self.assertEqual(self.client.post(reverse("create_post"), data).status_code, 409)
 
     def test_missing_request_id_is_explicit_for_both_endpoints(self):

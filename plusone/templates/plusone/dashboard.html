@@ -69,7 +69,7 @@
             <a class="dashboard-web-row match-row-web type-{{ match.post.activity_type }}" href="{% url 'chat' match.id %}">
               <div class="dashboard-row-main">
                 <strong>{{ match.post.title }}</strong>
-                <span>{{ match.post.location.name }} | {{ match.post.start_time|date:"M j, H:i" }}</span>
+                <span>{{ match.post.location.name }} | {{ match.post.start_time|date:"M j, H:i" }}{% if match.post.expected_end_time %}–{{ match.post.expected_end_time|date:"M j, H:i" }}{% endif %}</span>
                 <small><span class="countdown" data-deadline="{{ match.phase_deadline|date:'c' }}">--</span> {% if match.status == "waiting" %}left to join the chat{% else %}left to decide{% endif %}</small>
               </div>
               <span class="teal-pill">{% if match.status == "waiting" %}Join waiting room{% else %}Open chat{% endif %}</span>
@@ -93,7 +93,7 @@
           <article class="dashboard-web-row live-card-row type-{{ post.activity_type }}">
             <div class="dashboard-row-main">
               <strong>{{ post.title }}</strong>
-              <span>{{ post.start_time|date:"H:i" }} | {{ post.location.name }}</span>
+              <span>{{ post.start_time|date:"H:i" }}{% if post.expected_end_time %}–{{ post.expected_end_time|date:"H:i" }}{% endif %} | {{ post.location.name }}</span>
               <small>Waiting for one match | <span class="countdown" data-deadline="{{ post.expire_time|date:'c' }}">--</span> left</small>
             </div>
             <div class="dashboard-row-actions">
@@ -120,7 +120,7 @@
           <a class="dashboard-web-row match-row-web type-{{ match.post.activity_type }}" href="{% url 'chat' match.id %}">
             <div class="dashboard-row-main">
               <strong>{{ match.post.title }}</strong>
-              <span>{{ match.post.location.name }} | {{ match.post.start_time|date:"M j, H:i" }}</span>
+              <span>{{ match.post.location.name }} | {{ match.post.start_time|date:"M j, H:i" }}{% if match.post.expected_end_time %}–{{ match.post.expected_end_time|date:"M j, H:i" }}{% endif %}</span>
             </div>
             <span class="teal-pill handoff-pill">View handoff</span>
           </a>

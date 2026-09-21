@@ -15,9 +15,10 @@ Browser (Django templates + vanilla JS polling)
   -> DeepSeek API (OpenAI-compatible; required for production content writes)
 ```
 
-Deployment: Render web service (Gunicorn+Uvicorn, WhiteNoise static),
-PostgreSQL add-on, keep-alive ping via GitHub Actions. `DEEPSEEK_API_KEY`
-lives server-side only.
+Deployment: Python 3.13 pinned in `.python-version`; Render web service
+(Gunicorn+Uvicorn, WhiteNoise static); PostgreSQL add-on; scheduled liveness
+and readiness probes via GitHub Actions. `DEEPSEEK_API_KEY` lives server-side
+only.
 
 ## Key Design Decisions
 
@@ -36,7 +37,7 @@ lives server-side only.
   treated as untrusted input to AI prompts).
 - `CampusLocation` - seeded by migration; parse targets.
 - `ActivityPost` - temporary card; status ACTIVE/MATCHED/EXPIRED/CANCELLED,
-  `expire_time` TTL, capacity fixed to 1.
+  `expire_time` discovery TTL, expected meetup end, capacity fixed to 1.
 - `Swipe` - unique (user, post) with interested/pass action.
 - `Match` - unique (post, swiper); WAITING/CHATTING/AGREED/DECLINED/EXPIRED,
   waiting deadline, foreground timestamps, one-time start/deadline and consent flags.

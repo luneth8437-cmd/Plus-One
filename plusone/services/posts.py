@@ -15,16 +15,39 @@ def moderate_activity_text(user, text):
     return moderate_text(user, text)
 
 
-PUBLISH_FIELDS = ("title", "description", "activity_type", "location", "start_time", "expire_minutes", "raw_text")
+PUBLISH_FIELDS = (
+    "title",
+    "description",
+    "activity_type",
+    "location",
+    "start_time",
+    "expected_end_time",
+    "expire_minutes",
+    "raw_text",
+)
+LEGACY_PUBLISH_FIELDS = tuple(field for field in PUBLISH_FIELDS if field != "expected_end_time")
 
 
 def publish_fingerprint(data):
     return fingerprint({key: data.get(key, "") for key in PUBLISH_FIELDS})
 
 
+def legacy_publish_fingerprint(data):
+    return fingerprint({key: data.get(key, "") for key in LEGACY_PUBLISH_FIELDS})
+
+
 def published_replay(user, data):
     key = request_uuid(data.get("request_id"))
-    return check_replay(ActivityPost.objects.filter(user=user, request_id=key).first(), publish_fingerprint(data))
+    record = ActivityPost.objects.filter(user=user, request_id=key).first()
+    try:
+        return check_replay(record, publish_fingerprint(data))
+    except RequestError:
+        # A request accepted before expected_end_time existed stored the old
+        # fingerprint shape. Only an unchanged old page (field absent, not
+        # merely blank) may reconcile against that historical digest.
+        if record and "expected_end_time" not in data:
+            return check_replay(record, legacy_publish_fingerprint(data))
+        raise
 
 
 def save_activity_post_for_user(user, form, request_id=None, request_fingerprint=None):
@@ -35,12 +58,12 @@ def save_activity_post_for_user(user, form, request_id=None, request_fingerprint
             if current.user_id != user.pk or current.status != ActivityPost.Status.ACTIVE or current.is_expired or current.held_spots:
                 raise RequestError("This card changed while you were editing. Your changes were not saved. Review its current status before trying again.", 409)
             # Never save the stale ModelForm instance over a new match state.
-            for field in ("title", "description", "activity_type", "location", "start_time"):
+            for field in ("title", "description", "activity_type", "location", "start_time", "expected_end_time"):
                 setattr(current, field, form.cleaned_data[field])
             from datetime import timedelta
             from django.utils import timezone
             current.expire_time = timezone.now() + timedelta(minutes=form.cleaned_data["expire_minutes"])
-            current.save(update_fields=["title", "description", "activity_type", "location", "start_time", "expire_time", "updated_at"])
+            current.save(update_fields=["title", "description", "activity_type", "location", "start_time", "expected_end_time", "expire_time", "updated_at"])
             log_event(ProductEvent.Name.EDIT_CARD, user=user, post=current)
             return current
     key = request_uuid(request_id)

@@ -80,6 +80,7 @@ class ActivityPost(models.Model):
     activity_type = models.CharField(max_length=20, choices=ActivityType.choices)
     location = models.ForeignKey(CampusLocation, on_delete=models.PROTECT, related_name="activity_posts")
     start_time = models.DateTimeField()
+    expected_end_time = models.DateTimeField(null=True, blank=True, db_index=True)
     expire_time = models.DateTimeField()
     capacity = models.PositiveSmallIntegerField(default=1)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)

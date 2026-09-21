@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.utils import timezone
 
 from .models import ActivityPost, CampusLocation
@@ -30,6 +32,11 @@ def post_initial_from_ai(parsed):
         "activity_type": parsed.get("activity_type", ActivityPost.ActivityType.OTHER),
         "location": location.id if location else None,
         "start_time": timezone.localtime(start_time).strftime("%Y-%m-%dT%H:%M") if start_time else "",
+        "expected_end_time": (
+            timezone.localtime(start_time + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M")
+            if start_time
+            else ""
+        ),
         "expire_minutes": parsed.get("expire_minutes", 45),
     }
 
@@ -49,6 +56,7 @@ def post_form_preview(form):
         if selected_activity_type
         else "Activity"
     )
+    expected_end_time = preview_start_time(source.get("expected_end_time"), fallback="")
     return {
         "title": source.get("title") or "Your Plus One title",
         "description": source.get("description") or "The card preview updates as you edit the structured fields.",
@@ -56,18 +64,19 @@ def post_form_preview(form):
         "activity_label": activity_label,
         "location": location.name if location else "Campus location",
         "start_time": preview_start_time(source.get("start_time")),
+        "expected_end_time": f"Ends {expected_end_time}" if expected_end_time else "Expected end time",
         "expire_minutes": source.get("expire_minutes") or "45",
     }
 
 
-def preview_start_time(value):
+def preview_start_time(value, fallback="Start time"):
     if not value:
-        return "Start time"
+        return fallback
     if isinstance(value, str):
         try:
             start_time = timezone.datetime.fromisoformat(value)
         except ValueError:
-            return "Start time"
+            return fallback
     else:
         start_time = value
     if timezone.is_naive(start_time):
@@ -84,6 +93,11 @@ def post_edit_initial(post):
         "activity_type": post.activity_type,
         "location": post.location_id,
         "start_time": timezone.localtime(post.start_time).strftime("%Y-%m-%dT%H:%M"),
+        "expected_end_time": (
+            timezone.localtime(post.expected_end_time).strftime("%Y-%m-%dT%H:%M")
+            if post.expected_end_time
+            else ""
+        ),
         "expire_minutes": remaining_minutes,
     }
 

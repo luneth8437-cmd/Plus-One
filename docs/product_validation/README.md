@@ -19,7 +19,7 @@ Do not invent user quotes, metrics, or model results. Use these files as the ope
 ## Recommended Order
 
 1. Run 5-8 user interviews before adding more features.
-2. Run 5-10 usability tests on the live Render demo.
+2. After verifying the deployed commit and database migration, run 5-10 usability tests on the live Render product.
 3. Run a dedicated AI parsing/moderation benchmark for the highest-risk draft failures.
 4. Convert the strongest three iteration cases into portfolio slides.
 5. Add 1-2 real funnel metrics after the analytics events are implemented.

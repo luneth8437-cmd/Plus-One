@@ -144,6 +144,7 @@ class Command(BaseCommand):
         ]
 
         for data in posts:
+            data["expected_end_time"] = data["start_time"] + timedelta(hours=1)
             ActivityPost.objects.update_or_create(
                 user=data["user"],
                 title=data["title"],

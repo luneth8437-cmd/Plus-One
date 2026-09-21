@@ -9,10 +9,20 @@ For an existing deployment, follow the [compatibility rollout sequence](docs/eng
 Run these from the Django project root:
 
 ```bash
+python --version
+python -m pip install -r requirements.txt
+python -m pip check
 python manage.py check
+python manage.py makemigrations --check --dry-run
 python manage.py test
 python manage.py collectstatic --no-input
+git diff --check
 ```
+
+The repository pins Python 3.13 in `.python-version`, matching CI. Render reads
+this file automatically; remove or update any conflicting `PYTHON_VERSION`
+value already set in the dashboard. See Render's
+[Python version guide](https://render.com/docs/python-version).
 
 Make sure real secrets are not committed:
 
@@ -24,19 +34,24 @@ The real `.env` file is ignored by git. `.env.example` must contain placeholders
 
 ## 2. Push to GitHub
 
-Commit the deployment-ready files and push the branch:
+Review the intended files, commit them, and push the exact branch configured in
+Render. This repository currently delivers from `deepseek-api`; do not switch
+an existing service to `main` unless that branch has intentionally become the
+release source.
 
 ```bash
-git add .
+git status --short
+git diff --check
+git add --patch
 git commit -m "Prepare Plus One for production deploy"
-git push
+git push origin deepseek-api
 ```
 
-Deploy from the branch you want Render to track, usually `main`.
+Stage any reviewed new files separately before committing.
 
-## 3. Create the Render service
+## 3. Create or update the Render service
 
-Recommended path:
+For a new installation:
 
 1. Open the Render Dashboard.
 2. Choose **Blueprints**.
@@ -47,7 +62,7 @@ Recommended path:
 `render.yaml` creates:
 
 - a Python web service named `plusone`,
-- a PostgreSQL database named `plusone-db`,
+- a PostgreSQL database named `plusone-db-v2`,
 - free instance plans for the first public test,
 - a generated `SECRET_KEY`,
 - `DJANGO_DEBUG=False`,
@@ -55,6 +70,11 @@ Recommended path:
 - HTTPS redirect and short HSTS defaults in Django production mode,
 - `build.sh` as the build command,
 - Gunicorn + Uvicorn as the start command.
+
+For the existing hosted product, sync the existing Blueprint or deploy the
+existing web service. Do not create another database simply because a resource
+name differs in the dashboard. First confirm that the current service keeps its
+existing `DATABASE_URL`, database resource and region.
 
 ## 4. Confirm environment variables
 
@@ -103,6 +123,11 @@ After the first deploy completes:
 4. With new matches enabled, swipe interested and confirm the waiting room does not start with only one participant present. Open both chat pages, send a safe message, agree to meet, and confirm the handoff.
 5. Try an unsafe post or chat message and confirm it is blocked.
 6. Visit `/dashboard/` and confirm live cards, open chats, handoffs, and history render cleanly.
+
+The scheduled GitHub workflow checks both `/healthz/` and `/readyz/`. A failed
+request fails the workflow instead of being converted into a green result.
+This probe is not a backup, does not prevent database expiry, and does not prove
+that the deployed commit matches the repository branch.
 
 ## 6. Production data note
 

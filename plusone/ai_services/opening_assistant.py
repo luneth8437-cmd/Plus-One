@@ -131,6 +131,7 @@ def gather_context(match, for_user):
             "activity_type": post.activity_type,
             "location": post.location.name,
             "start_time": post.start_time.isoformat() if post.start_time else "",
+            "expected_end_time": post.expected_end_time.isoformat() if post.expected_end_time else "",
         },
         "viewer_role": "poster" if for_user.id == match.poster_id else "swiper",
         "viewer": viewer_card,

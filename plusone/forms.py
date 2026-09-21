@@ -30,10 +30,19 @@ class ActivityPostForm(forms.ModelForm):
     )
     class Meta:
         model = ActivityPost
-        fields = ["title", "description", "activity_type", "location", "start_time", "expire_minutes"]
+        fields = [
+            "title",
+            "description",
+            "activity_type",
+            "location",
+            "start_time",
+            "expected_end_time",
+            "expire_minutes",
+        ]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3, "maxlength": 2000}),
             "start_time": forms.DateTimeInput(attrs={"type": "datetime-local"}),
+            "expected_end_time": forms.DateTimeInput(attrs={"type": "datetime-local"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -43,6 +52,9 @@ class ActivityPostForm(forms.ModelForm):
         self.fields["location"].empty_label = "Campus location"
         self.fields["title"].widget.attrs.setdefault("placeholder", "Basketball game tonight")
         self.fields["description"].widget.attrs.setdefault("placeholder", "Looking for someone to join for a quick vibe check first.")
+        self.fields["expected_end_time"].required = False
+        self.fields["expected_end_time"].label = "Expected end time"
+        self.fields["expected_end_time"].help_text = "Optional. If blank, Plus One uses one hour after the start time."
 
     def clean_start_time(self):
         start_time = self.cleaned_data["start_time"]
@@ -53,6 +65,18 @@ class ActivityPostForm(forms.ModelForm):
         if start_time < timezone.now() - timedelta(minutes=5):
             raise forms.ValidationError("Start time cannot be in the past.")
         return start_time
+
+    def clean(self):
+        cleaned_data = super().clean()
+        start_time = cleaned_data.get("start_time")
+        expected_end_time = cleaned_data.get("expected_end_time")
+        if not start_time:
+            return cleaned_data
+        if expected_end_time is None:
+            cleaned_data["expected_end_time"] = start_time + timedelta(hours=1)
+        elif expected_end_time <= start_time:
+            self.add_error("expected_end_time", "Expected end time must be after the start time.")
+        return cleaned_data
 
     def save_for_user(self, user):
         post = super().save(commit=False)

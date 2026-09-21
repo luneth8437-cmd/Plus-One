@@ -80,6 +80,7 @@
       <div class="chips">
         <span>{{ post.location.name }}</span>
         <span>{{ post.start_time|date:"M j, H:i" }}</span>
+        {% if post.expected_end_time %}<span>Ends {{ post.expected_end_time|date:"M j, H:i" }}</span>{% endif %}
         {% if post.user_id == user.id %}
           <span>Your live card</span>
         {% else %}

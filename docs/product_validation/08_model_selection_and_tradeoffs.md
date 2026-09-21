@@ -11,12 +11,12 @@ Each AI surface has a different failure cost and latency budget, which drives a 
 | Surface | Task shape | Latency budget | Cost of a wrong answer | Design consequence |
 | --- | --- | --- | --- | --- |
 | Post parsing (`parse_activity_text`) | Closed: text → 6 fixed JSON fields | ~2s (user is waiting on the create form) | High: a wrong date/time can strand a real meetup | LLM output merged with rule parser, then guardrail validation; human review before publish |
-| Safety moderation (`moderate_text`) | Closed: text → flag/allow + reason | <1s (blocks posting/chat) | Very high (false negative) / medium (false positive) | Rule layer always runs; LLM adds coverage; rules cannot be overridden by the LLM |
-| Icebreaker (`icebreaker.py`) | Open: generate a friendly opener | Relaxed (post-match, non-blocking) | Low: a bad suggestion is just ignored | The only surface where generative freedom is acceptable |
+| Safety moderation (`moderate_text`) | Closed: text → flag/allow + reason | 5s total budget (blocks posting/chat) | Very high (false negative) / medium (false positive) | Production requires an external decision and fails closed; rules mode is DEBUG/test-only |
+| Opening suggestions (`opening_assistant.py`) | Open: propose friendly messages after chat starts | 8s total budget, user-initiated | Low: a bad suggestion is ignored | Generative freedom is acceptable because the user still chooses and sends |
 
 ## Model Choice: deepseek-v4-flash
 
-| Criterion | deepseek-v4-flash (primary) | gpt-4o-mini (fallback provider) | Rule parser (always-on fallback) |
+| Criterion | deepseek-v4-flash (primary) | gpt-4o-mini (fallback provider) | Rule parser (draft/suggestion fallback) |
 | --- | --- | --- | --- |
 | Input / output price per 1M tokens | $0.14 / $0.28 (cache hit: $0.003 input) | $0.15 / $0.60 | $0 |
 | Measured parse latency (thinking disabled) | avg 1403ms, p50 1373ms, p95 1892ms (19-case benchmark, 2026-07-15) | not benchmarked in this project | ~0ms |
@@ -26,7 +26,7 @@ Each AI surface has a different failure cost and latency budget, which drives a 
 
 Why this pick, in order of weight: the OpenAI-compatible API means the provider is swappable via one env var (`DEEPSEEK_API_KEY` → `OPENAI_API_KEY`) with zero code change, so the choice is low-commitment by construction; output pricing is ~2x cheaper than the closest OpenAI equivalent; and reasoning ("thinking") can be disabled per call, which matters because a create-form parse must not spend seconds reasoning about a lunch invitation.
 
-`DEEPSEEK_THINKING` is disabled by default in `client.py` for exactly this reason: parsing and moderation are closed tasks where reasoning tokens add latency and cost without a demonstrated accuracy gain — the 2026-07-15 benchmark shows the non-reasoning pipeline remains close to the deterministic parser (17/19 vs. 18/19) on the regression set.
+`DEEPSEEK_THINKING` is disabled by default in `client.py` because these short request-path tasks need bounded latency. The 2026-07-15 parsing benchmark shows the non-reasoning pipeline remains close to the deterministic parser (17/19 vs. 18/19) on that historical regression set.
 
 ## Cost per Call and per User
 
@@ -41,15 +41,17 @@ Estimated from the actual prompts in `parsing.py` / `moderation.py` (system prom
 
 The system prompt is identical across calls except for the timestamp, so DeepSeek context caching ($0.003/1M on cache hits) would cut the dominant input cost by ~98% at scale; not yet enabled because absolute cost is negligible at current volume. Conclusion: model cost is not a constraint for this product; latency and reliability are the binding constraints, which is why they — not price — drive the architecture.
 
-## Degradation Ladder
+## Degradation Boundaries
 
-Three tiers, checked in order at call time (`client.py`):
+Parsing and optional suggestions use three tiers, checked in order at call time (`client.py`):
 
 1. DeepSeek (primary) — used when `DEEPSEEK_API_KEY` is set and the call succeeds.
 2. OpenAI-compatible fallback — same codepath, used when only `OPENAI_API_KEY` is set.
 3. Deterministic rule pipeline — used when no key is configured or any LLM call raises; every LLM parse is also merged against the rule parse, so tier 3 is active even when tier 1 succeeds.
 
-Every call logs provider, model, success, and latency to `LLMLog` (strategy `*_failed_rule_fallback` marks degradations), so the fallback trigger rate is measurable from production data rather than assumed.
+Safety moderation has a stricter boundary: production does not fall back to development rules. Missing credentials, timeouts, and invalid provider responses return a temporary-unavailable decision, preserve the user's input, and do not write the post/message. Rules moderation is available only when explicitly selected with `DEBUG=True` for local development and tests.
+
+Every call logs provider, model, success, and latency to `LLMLog`, so parsing/suggestion fallback and moderation unavailability remain observable rather than assumed.
 
 The benchmark justifies calling tier 3 a peer, not a degraded mode: with guardrails applied, fallback scores 18/19 and the LLM scores 17/19 on the regression set, with only low-severity activity-classification misses. Users lose ~1.4s of latency when the LLM is up and lose no measured accuracy when it is down.
 
@@ -75,7 +77,8 @@ Where an agent is justified — and shipped: the post-match opening assistant (`
 | --- | --- |
 | deepseek-v4-flash as primary model | Cheapest adequate model with controllable reasoning and an escape hatch to OpenAI via one env var |
 | Thinking disabled for parse/moderation | Closed tasks; benchmark shows no accuracy gain to pay latency for |
-| Deterministic pipeline as peer, not backup | Slightly higher measured accuracy (18/19 vs. 17/19) at ~0ms; product works with zero API spend |
+| Deterministic drafting pipeline as peer, not backup | Slightly higher historical parsing accuracy (18/19 vs. 17/19) at ~0ms; drafting remains usable with zero API spend |
+| Production moderation fails closed | Safety cannot inherit the lower-assurance fallback policy used by editable drafts and optional suggestions |
 | No agent loop in the core flow | Blocking latency, CI testability, bounded behavior, and the human-commit safety line all argue against it |
 | Agent reserved for open-ended, low-stakes surfaces | Opening assistant fits the profile; core loop does not |
 
