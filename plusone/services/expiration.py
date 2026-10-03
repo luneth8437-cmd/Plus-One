@@ -1,5 +1,6 @@
 from django.db import OperationalError
 from django.utils import timezone
+from datetime import timedelta
 from django.db.models import Q
 
 from plusone.models import ActivityPost, Match
@@ -10,14 +11,17 @@ from plusone.services.lifecycle import expire_locked, locked_match
 def refresh_expired_records():
     try:
         now = timezone.now()
-        expired_posts = ActivityPost.objects.filter(
-            status=ActivityPost.Status.ACTIVE,
-            expire_time__lte=now,
-        ).update(status=ActivityPost.Status.EXPIRED)
+        card_deadline_passed = (Q(expire_time__lte=now) | Q(expected_end_time__lte=now)
+                               | Q(expected_end_time__isnull=True, start_time__lte=now - timedelta(hours=1)))
+        expired_posts = ActivityPost.objects.filter(status=ActivityPost.Status.ACTIVE).filter(
+            card_deadline_passed).update(status=ActivityPost.Status.EXPIRED)
         ids = list(Match.objects.filter(
             Q(status=Match.Status.CHATTING, chat_expires_at__lte=now)
             | Q(status=Match.Status.WAITING, waiting_expires_at__lte=now)
             | Q(status=Match.Status.WAITING, post__expire_time__lte=now)
+            | Q(status=Match.Status.WAITING, post__expected_end_time__lte=now)
+            | Q(status=Match.Status.WAITING, post__expected_end_time__isnull=True,
+                post__start_time__lte=now - timedelta(hours=1))
         ).values_list("pk", flat=True)[:200])
         expired_matches = 0
         for match_id in ids:

@@ -8,21 +8,28 @@
         <p class="eyebrow">Needs decision</p>
         <h1>You have a chat waiting.</h1>
         <p class="lead">Waiting rooms and open chats expire fast. Join your match, then decide whether to meet, decline, or report.</p>
+      {% elif feedback_matches %}
+        <p class="eyebrow">Meetup feedback</p>
+        <h1>How did your meetup go?</h1>
+        <p class="lead">Your own feedback is still due. Open the plan to record what happened before the deadline.</p>
       {% else %}
         <p class="eyebrow">My Plus Ones</p>
         <h1>Keep your Plus Ones moving.</h1>
-        <p class="lead">Track active posts, open chats, meet handoffs, and post history without leaving the dashboard.</p>
+        <p class="lead">Find your live cards, chats and meeting plans again in this browser.</p>
       {% endif %}
       <div class="dashboard-hero-actions">
         {% if open_matches %}
           {% with next_match=open_matches.0 %}
             <a class="primary-action coral" href="{% url 'chat' next_match.id %}">Open waiting chat</a>
           {% endwith %}
+        {% elif feedback_matches %}
+          {% with next_match=feedback_matches.0 %}<a class="primary-action" href="{% url 'chat' next_match.id %}#meetup-feedback">Record meetup feedback</a>{% endwith %}
         {% else %}
           <a class="primary-action" href="{% url 'create_post' %}">Create another Plus One</a>
         {% endif %}
         <a class="secondary-action" href="{% url 'discover' %}">View Discover</a>
       </div>
+      {% if campus_timezone %}<p class="campus-context">All times: {{ campus_timezone }}</p>{% endif %}
     </div>
 
     <aside class="dashboard-state-panel state-{{ dashboard_state.tone }}" aria-label="Current Plus One state">
@@ -69,10 +76,23 @@
             <a class="dashboard-web-row match-row-web type-{{ match.post.activity_type }}" href="{% url 'chat' match.id %}">
               <div class="dashboard-row-main">
                 <strong>{{ match.post.title }}</strong>
-                <span>{{ match.post.location.name }} | {{ match.post.start_time|date:"M j, H:i" }}{% if match.post.expected_end_time %}–{{ match.post.expected_end_time|date:"M j, H:i" }}{% endif %}</span>
+                <span>{{ match.dashboard_plan_point }} | {{ match.dashboard_meeting_at|date:"M j, H:i" }}{% if match.dashboard_expected_end_at %}–{{ match.dashboard_expected_end_at|date:"M j, H:i" }}{% else %} · End not recorded{% endif %}</span>
                 <small><span class="countdown" data-deadline="{{ match.phase_deadline|date:'c' }}">--</span> {% if match.status == "waiting" %}left to join the chat{% else %}left to decide{% endif %}</small>
               </div>
               <span class="teal-pill">{% if match.status == "waiting" %}Join waiting room{% else %}Open chat{% endif %}</span>
+            </a>
+          {% endfor %}
+        </div>
+      </article>
+    {% endif %}
+
+    {% if feedback_matches %}
+      <article class="dashboard-panel dashboard-panel-wide feedback-priority-panel" data-feedback-tasks>
+        <div class="dashboard-panel-head"><div><span class="dashboard-pill active">Feedback due</span><h2>Did you meet?</h2><p class="panel-helper">Only your own report is missing. Arrival signals do not count as meetup feedback.</p></div></div>
+        <div class="dashboard-list">
+          {% for match in feedback_matches %}
+            <a class="dashboard-web-row match-row-web type-{{ match.post.activity_type }}" href="{% url 'chat' match.id %}#meetup-feedback" data-feedback-match="{{ match.id }}">
+              <div class="dashboard-row-main"><strong>{{ match.post.title }}</strong><span>{{ match.dashboard_plan_point }} | {{ match.dashboard_meeting_at|date:"M j, H:i" }}</span><small>Feedback deadline: {{ match.feedback_deadline|date:"M j, H:i" }}{% if campus_timezone %} · {{ campus_timezone }}{% endif %}</small></div><span class="teal-pill">Record feedback</span>
             </a>
           {% endfor %}
         </div>
@@ -93,8 +113,8 @@
           <article class="dashboard-web-row live-card-row type-{{ post.activity_type }}">
             <div class="dashboard-row-main">
               <strong>{{ post.title }}</strong>
-              <span>{{ post.start_time|date:"H:i" }}{% if post.expected_end_time %}–{{ post.expected_end_time|date:"H:i" }}{% endif %} | {{ post.location.name }}</span>
-              <small>Waiting for one match | <span class="countdown" data-deadline="{{ post.expire_time|date:'c' }}">--</span> left</small>
+              <span>{{ post.start_time|date:"M j, H:i" }}{% if post.expected_end_time %}–{{ post.expected_end_time|date:"M j, H:i" }}{% endif %} | {{ post.location.name }}</span>
+              <small>Waiting for one match | <span class="countdown" data-deadline="{{ post.matching_deadline|date:'c' }}">--</span> left</small>
             </div>
             <div class="dashboard-row-actions">
               <a href="{% url 'post_detail' post.id %}">View</a>

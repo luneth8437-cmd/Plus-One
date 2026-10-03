@@ -179,6 +179,7 @@ class PublishDateGuardrailTests(TestCase):
             "activity_type": ActivityPost.ActivityType.SPORTS,
             "location": self.location.id,
             "start_time": timezone.localtime(start_time).strftime("%Y-%m-%dT%H:%M"),
+            "expected_end_time": timezone.localtime(start_time + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"),
             "expire_minutes": 60,
         }
         if confirm:

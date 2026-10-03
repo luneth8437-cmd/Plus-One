@@ -6,14 +6,15 @@
     <p class="eyebrow">Edit active card</p>
     <h1>Update your Plus One.</h1>
     <p class="lead">You can edit the activity while it is active, or cancel it if the plan is no longer happening.</p>
+    {% if campus_timezone %}<p class="campus-context">All times: {{ campus_timezone }}</p>{% endif %}
   </div>
 </section>
 
-<section class="two-column create-layout">
+<section class="two-column edit-layout">
   <article class="panel">
     <h2>Edit structured fields</h2>
     <form method="post" class="stacked-form">
-      {% csrf_token %}
+      {% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}">
       {{ post_form.as_p }}
       <button class="primary-action" name="action" value="save">Save changes</button>
       <button class="primary-action coral" name="action" value="cancel" formnovalidate>Cancel this card</button>

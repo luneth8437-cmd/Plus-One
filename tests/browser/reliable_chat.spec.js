@@ -49,7 +49,7 @@ test("two isolated users complete a reliable waiting, chat, replay, agreement, a
     const card = joiner.locator("article.activity-card", { hasText: title });
     await expect(card).toBeVisible();
     await card.getByRole("button", { name: "Interested" }).click();
-    await expect(joiner.getByRole("heading", { name: "It's a vibe." })).toBeVisible();
+    await expect(joiner.getByRole("heading", { name: "Meet your Plus One in chat." })).toBeVisible();
     await joiner.getByRole("link", { name: "Open chat" }).click();
 
     const joinerRoot = joiner.locator("[data-chat-root]");
@@ -206,7 +206,8 @@ test("two isolated users complete a reliable waiting, chat, replay, agreement, a
 
     await poster.evaluate(({ requestId, text }) => {
       const matchId = document.querySelector("[data-chat-root]").dataset.chatId;
-      sessionStorage.setItem(`plusone:chat-draft:${matchId}`, JSON.stringify({ requestId, text, state: "unknown" }));
+      const scope = document.body.dataset.sessionScope;
+      sessionStorage.setItem(`plusone:${scope}:chat-draft:${matchId}`, JSON.stringify({ requestId, text, state: "unknown" }));
     }, { requestId: closedRequestId, text: closedLostText });
     await poster.reload();
     await expect(poster.locator("[data-chat-root]")).toHaveAttribute("data-chat-status", "agreed");
@@ -214,7 +215,8 @@ test("two isolated users complete a reliable waiting, chat, replay, agreement, a
     await expect(poster.locator("[data-chat-draft-recovery]")).toBeHidden();
     const recoveredStorage = await poster.evaluate(() => {
       const matchId = document.querySelector("[data-chat-root]").dataset.chatId;
-      return sessionStorage.getItem(`plusone:chat-draft:${matchId}`);
+      const scope = document.body.dataset.sessionScope;
+      return sessionStorage.getItem(`plusone:${scope}:chat-draft:${matchId}`);
     });
     expect(recoveredStorage).toBeNull();
 

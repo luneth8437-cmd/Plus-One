@@ -5,37 +5,45 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Plus One{% endblock %}</title>
-  <link rel="stylesheet" href="{% static 'plusone/styles.css' %}?v=20261003-meeting-plan">
-  <script defer src="{% static 'plusone/app.js' %}?v=20261003-meeting-plan"></script>
+  <link rel="stylesheet" href="{% static 'plusone/styles.css' %}?v=20261003-interaction-followup">
+  <script defer src="{% static 'plusone/app.js' %}?v=20261003-interaction-followup"></script>
 </head>
-<body{% if user.is_authenticated %} data-session-updates-url="{% url 'session_updates' %}"{% endif %}>
+<body data-session-scope="{{ session_scope }}"{% if user.is_authenticated %} data-session-updates-url="{% url 'session_updates' %}"{% endif %}>
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <header class="topbar">
     <a class="brand" href="{% url 'discover' %}">
       <img class="brand-logo" src="{% static 'plusone/plusone-logo.jpeg' %}" alt="Plus One">
     </a>
-    <nav class="nav">
-      <a href="{% url 'discover' %}">Discover</a>
-      <a href="{% url 'create_post' %}">Create</a>
-      <a href="{% url 'dashboard' %}" data-dashboard-link>My Plus Ones{% if open_chat_count %}<span class="nav-badge">{{ open_chat_count }}</span>{% endif %}</a>
-      <a href="{% url 'about' %}">About</a>
+    <nav class="nav" aria-label="Main navigation">
+      <a href="{% url 'discover' %}"{% if request.resolver_match.url_name == 'discover' or request.resolver_match.url_name == 'home' %} aria-current="page"{% endif %}>Discover</a>
+      <a href="{% url 'create_post' %}"{% if request.resolver_match.url_name == 'create_post' %} aria-current="page"{% endif %}>Create</a>
+      <a href="{% url 'dashboard' %}" data-dashboard-link{% if request.resolver_match.url_name == 'dashboard' %} aria-current="page"{% endif %}>My Plus Ones{% if open_chat_count %}<span class="nav-badge" aria-label="{{ open_chat_count }} open matches">{{ open_chat_count }}</span>{% endif %}</a>
     </nav>
     <div class="identity-summary">
-      <span>Anonymous session <strong>{{ user.userprofile.initial|default:"ON" }}</strong></span>
-      <a href="{% url 'session' %}?next={{ request.path }}">Manage</a>
+      <span>Temporary guest <strong>{{ user.userprofile.initial|default:"ON" }}</strong></span>
+      {% url 'notifications' as notifications_url %}{% if notifications_url %}<a href="{{ notifications_url }}" data-notifications-link{% if request.resolver_match.url_name == 'notifications' %} aria-current="page"{% endif %}>Updates{% if unread_notification_count %}<span class="nav-badge">{{ unread_notification_count }}</span>{% endif %}</a>{% endif %}
+      <a href="{% url 'session' %}?next={{ request.path|urlencode }}"{% if request.resolver_match.url_name == 'session' %} aria-current="page"{% endif %}>Session</a>
     </div>
   </header>
 
   {% if messages %}
     <section class="messages" aria-label="Messages">
       {% for message in messages %}
-        <div class="message message-{{ message.tags }}">{{ message }}</div>
+        <div class="message message-{{ message.tags }}"{% if 'error' in message.tags %} role="alert"{% else %} role="status"{% endif %}>{{ message }}</div>
       {% endfor %}
     </section>
   {% endif %}
 
-  <main class="page">
+  <section class="match-inbox" data-match-inbox aria-label="Matches needing attention" hidden>
+    <h2>Needs your attention</h2><ul data-match-inbox-list></ul><a class="details" href="{% url 'dashboard' %}">Open My Plus Ones</a>
+  </section>
+  <main class="page" id="main-content" tabindex="-1">
     {% block content %}{% endblock %}
   </main>
+  <footer class="site-footer">
+    <p>{% if campus_name %}{{ campus_name }} · {% endif %}{% if campus_timezone %}All times: {{ campus_timezone }}{% endif %}</p>
+    <nav aria-label="Information"><a href="{% url 'about' %}">About</a>{% url 'privacy' as privacy_url %}{% if privacy_url %}<a href="{{ privacy_url }}">Privacy</a>{% endif %}{% url 'support' as support_url %}{% if support_url %}<a href="{{ support_url }}">Help and safety</a>{% endif %}</nav>
+  </footer>
   <div class="live-toast" data-live-toast role="status" aria-live="polite" aria-atomic="true" hidden></div>
 </body>
 </html>

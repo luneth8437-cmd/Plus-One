@@ -14,6 +14,7 @@ async function apiAction(page, action, revision) {
     const root = document.querySelector('[data-chat-root]');
     const body = new FormData();
     body.set('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    body.set('session_scope', document.body.dataset.sessionScope);
     body.set('request_id', crypto.randomUUID());
     body.set('revision', revision);
     body.set('action', action);
@@ -110,9 +111,11 @@ test('shared meetup plan survives response loss, requires current consent, and c
     await expect(poster.locator('[data-chat-root]')).toHaveAttribute('data-chat-status', 'agreed');
     await expect(guest.locator('[data-chat-compose]')).toBeHidden();
     await guest.locator('[data-plan-action="arrived"]').click();
-    await expect(poster.locator('[data-other-meetup-status]')).toContainText(/arrived/i);
+    await expect(poster.locator('[data-other-meetup-status]')).toContainText('At the agreed meeting point');
     await poster.locator('[data-plan-action="delayed"][value="10"]').click();
-    await expect(guest.locator('[data-other-meetup-status]')).toContainText('10');
+    const arrival = await poster.evaluate(async () => (await fetch(document.querySelector('[data-chat-root]').dataset.chatEndpoint)).json());
+    expect(new Date(arrival.plan.viewer_arrival_eta).getTime()).toBeGreaterThan(Date.now());
+    await expect(guest.locator('[data-other-meetup-status]')).toContainText(arrival.plan.viewer_arrival_eta_display);
     await guest.screenshot({ path: 'test-results/meetup-handoff-mobile.png', fullPage: true });
 
     guest.once('dialog', dialog => dialog.accept());

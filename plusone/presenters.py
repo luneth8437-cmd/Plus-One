@@ -1,5 +1,3 @@
-from datetime import timedelta
-
 from django.utils import timezone
 
 from .models import ActivityPost, CampusLocation
@@ -12,10 +10,6 @@ def post_initial_from_ai(parsed):
     location = None
     if parsed.get("location_name"):
         location = CampusLocation.objects.filter(name__iexact=parsed["location_name"]).first()
-        if not location:
-            location = CampusLocation.objects.filter(name__icontains=parsed["location_name"]).first()
-    if not location:
-        location = CampusLocation.objects.first()
 
     start_time = None
     if parsed.get("start_time"):
@@ -23,8 +17,17 @@ def post_initial_from_ai(parsed):
             start_time = timezone.datetime.fromisoformat(parsed["start_time"])
             if timezone.is_naive(start_time):
                 start_time = timezone.make_aware(start_time, timezone.get_current_timezone())
-        except ValueError:
+        except (TypeError, ValueError):
             start_time = None
+
+    end_time = None
+    if parsed.get("expected_end_time"):
+        try:
+            end_time = timezone.datetime.fromisoformat(parsed["expected_end_time"])
+            if timezone.is_naive(end_time):
+                end_time = timezone.make_aware(end_time, timezone.get_current_timezone())
+        except (TypeError, ValueError):
+            end_time = None
 
     return {
         "title": parsed.get("title", ""),
@@ -33,8 +36,8 @@ def post_initial_from_ai(parsed):
         "location": location.id if location else None,
         "start_time": timezone.localtime(start_time).strftime("%Y-%m-%dT%H:%M") if start_time else "",
         "expected_end_time": (
-            timezone.localtime(start_time + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M")
-            if start_time
+            timezone.localtime(end_time).strftime("%Y-%m-%dT%H:%M")
+            if end_time
             else ""
         ),
         "expire_minutes": parsed.get("expire_minutes", 45),

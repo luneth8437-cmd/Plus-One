@@ -58,9 +58,14 @@ class Command(BaseCommand):
         summary = (
             f"{counts['users']} anonymous user(s), {counts['llm_logs']} AI log(s), "
             f"{counts['events']} product event(s), {counts['safety_reports']} safety report(s), "
+            f"{counts['activity_reports']} activity report(s), "
             f"{counts['report_messages']} expired chat-evidence message(s), "
             f"{counts['sessions']} expired session(s), and "
-            f"{counts['rate_limit_buckets']} expired rate-limit bucket(s)"
+            f"{counts['rate_limit_buckets']} expired rate-limit bucket(s), and "
+            f"{counts['browser_budget_buckets']} expired browser-budget bucket(s), and "
+            f"{counts['presence_leases']} expired terminal presence lease(s), "
+            f"{counts['push_subscriptions']} inactive push subscription(s), and "
+            f"{counts['push_deliveries']} old push delivery record(s)"
         )
         if options["commit"]:
             self.stdout.write(self.style.SUCCESS(f"Deleted {summary}."))

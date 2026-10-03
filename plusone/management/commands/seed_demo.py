@@ -20,6 +20,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         User = get_user_model()
+        if not settings.DEBUG and not options["reset"]:
+            raise CommandError("Demo activities are disabled when DEBUG=False. Use an isolated development database only.")
         if options["reset"]:
             if not settings.DEBUG:
                 raise CommandError("seed_demo --reset is disabled when DEBUG=False.")

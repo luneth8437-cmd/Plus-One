@@ -1,0 +1,26 @@
+{% extends "plusone/base.html" %}
+{% block title %}My updates | Plus One{% endblock %}
+{% block content %}
+<section class="hero compact"><div><p class="eyebrow">My updates</p><h1>Keep up with your plans.</h1><p class="lead">Return here for match and meetup updates in this browser.</p></div><a class="secondary-action" href="{% url 'dashboard' %}">My Plus Ones</a></section>
+<section class="information-grid">
+  <article class="panel">
+    <div class="panel-heading"><h2>Updates{% if unread_count %} · {{ unread_count }} unread{% endif %}</h2>{% if unread_count %}<form method="post">{% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}"><button type="submit" class="text-action" name="action" value="mark_all_read">Mark all read</button></form>{% endif %}</div>
+    <ul class="notification-list">
+      {% for notification in notifications %}
+        <li{% if not notification.is_read %} class="is-unread"{% endif %} data-notification-id="{{ notification.id }}">
+          {% if not notification.is_current %}<p class="eyebrow">Past update</p>{% endif %}
+          <strong>{{ notification.title }}</strong>
+          {% if notification.activity_title %}<p class="helptext">{{ notification.activity_title }}</p>{% endif %}
+          <p>{% if notification.body %}{{ notification.body }}{% else %}{{ notification.message }}{% endif %}</p>
+          {% if notification.deadline_display %}<p class="helptext" data-notification-deadline>{{ notification.deadline_label }} <time datetime="{{ notification.expires_at }}">{{ notification.deadline_display }}</time>{% if campus_timezone %} ({{ campus_timezone }}){% endif %}</p>{% endif %}
+          {% if notification.url %}<a href="{{ notification.url }}">View plan</a>{% endif %}
+          {% if not notification.is_read %}<form method="post">{% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}"><input type="hidden" name="notification_id" value="{{ notification.id }}"><button type="submit" class="text-action" name="action" value="mark_read">Mark read</button></form>{% endif %}
+        </li>
+      {% empty %}<li>No updates yet. New activity on your plans will appear here.</li>{% endfor %}
+    </ul>
+  </article>
+  <article class="panel notification-settings"><h2>Optional browser alerts</h2><p>Alert availability depends on your browser, device and notification permission. Background delivery is available only where supported and enabled. Alerts are not a guaranteed reminder or emergency channel.</p><button type="button" class="secondary-action" data-enable-notifications data-js-only hidden>Enable browser alerts</button><button type="button" class="text-action" data-retry-background-alerts data-js-only hidden>Retry background alerts</button><p class="helptext" data-notification-status role="status" aria-live="polite">Until alerts are enabled for this device, keep Plus One open or return to this updates page to check your plans.</p><noscript><p class="notice">JavaScript is needed for browser alerts. Refresh this page to check for new updates.</p></noscript><p>If you leave while someone is waiting, return before the waiting-room deadline to start your chat.</p></article>
+  <article class="panel"><h2>My safety reports</h2><ul class="notification-list">{% for report in reports %}<li><strong>{{ report.title }}</strong><p>{% if report.category_label %}{{ report.category_label }}{% else %}{{ report.category|capfirst }}{% endif %} · Status: {% if report.status_label %}{{ report.status_label }}{% else %}{{ report.status|capfirst }}{% endif %}</p>{% if report.url %}<a href="{{ report.url }}">View reported activity</a>{% endif %}</li>{% empty %}<li>No reports submitted by this identity.</li>{% endfor %}</ul><p class="helptext">Handling a report does not verify a guest's real identity.</p></article>
+  <article class="panel"><h2>Blocked guest identities</h2><ul class="notification-list">{% for block in blocks %}<li><strong>Blocked guest {{ block.target.userprofile.initial|default:"identity" }}</strong><p>This known identity cannot start a new match with you.</p><form method="post">{% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}"><input type="hidden" name="block_id" value="{{ block.id }}"><button type="submit" class="text-action" name="action" value="unblock">Unblock this identity</button></form></li>{% empty %}<li>No guest identities blocked.</li>{% endfor %}</ul><p class="helptext">A person may return under another temporary identity. Blocking is limited to the identity recorded here.</p></article>
+</section>
+{% endblock %}

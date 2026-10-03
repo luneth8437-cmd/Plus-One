@@ -5,12 +5,14 @@ from django.utils import timezone
 
 from .models import (
     ActivityPost,
+    ActivityReport,
     CampusLocation,
     ChatMessage,
     LLMLog,
     Match,
     SafetyReport,
     Swipe,
+    UserBlock,
     UserProfile,
 )
 
@@ -159,4 +161,45 @@ class SafetyReportAdmin(admin.ModelAdmin):
         return False
 
     def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ActivityReport)
+class ActivityReportAdmin(admin.ModelAdmin):
+    list_display = ("id", "category", "status", "post_evidence", "reporter_evidence", "created_at", "is_overdue")
+    list_filter = ("status", "category", OverdueSafetyReportFilter)
+    search_fields = ("reason", "handling_notes", "post__title", "post__user__username", "reporter__username")
+    fields = ("status", "handling_notes", "post_evidence", "reporter_evidence", "title_snapshot", "description_snapshot", "location_snapshot", "start_time_snapshot", "expected_end_time_snapshot", "category", "reason", "created_at", "updated_at")
+    readonly_fields = ("post_evidence", "reporter_evidence", "title_snapshot", "description_snapshot", "location_snapshot", "start_time_snapshot", "expected_end_time_snapshot", "category", "reason", "created_at", "updated_at")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("post__user", "reporter")
+
+    @admin.display(description="Card evidence")
+    def post_evidence(self, report):
+        title = report.title_snapshot or report.post.title
+        return f"Card {report.post_id}: {title}; publisher {report.post.user_id}: {report.post.user.username}"
+
+    @admin.display(description="Reporter evidence")
+    def reporter_evidence(self, report):
+        return f"User {report.reporter_id}: {report.reporter.username}"
+
+    @admin.display(boolean=True, description="Overdue")
+    def is_overdue(self, report):
+        return report.status != ActivityReport.Status.RESOLVED and report.created_at < timezone.now() - timedelta(days=7)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(UserBlock)
+class UserBlockAdmin(admin.ModelAdmin):
+    list_display = ("blocker", "target", "created_at")
+    search_fields = ("blocker__username", "target__username")
+    readonly_fields = ("blocker", "target", "created_at")
+
+    def has_add_permission(self, request):
         return False

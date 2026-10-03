@@ -5,12 +5,15 @@ from time import sleep
 from django.conf import settings
 from django.db import OperationalError
 from django.shortcuts import get_object_or_404
+from django.urls import reverse
 from django.utils import timezone
 
 from plusone.models import ActivityPost, Match, ProductEvent, Swipe
 from plusone.services.analytics import log_event
 from plusone.services.capacity import effective_capacity, holding_match_count
 from plusone.services.lifecycle import expire_locked, locked_post, identities_retired
+from plusone.services.safety import blocked_between
+from plusone.services.requests import RequestError
 
 SQLITE_LOCK_RETRY_DELAYS = (0.05, 0.15)
 
@@ -63,6 +66,8 @@ def _record_swipe(user, post_id, action):
     with locked_post(post_id, user.pk) as post:
         if identities_retired([user.pk, post.user_id]):
             return SwipeResult(SwipeOutcome.INACTIVE_POST, post.id), created_match
+        if blocked_between(user.pk, post.user_id):
+            return SwipeResult(SwipeOutcome.INACTIVE_POST, post.id), created_match
         # Lock the post while recording a swipe so two users cannot create
         # competing matches for the same active card at the same time.
         for current in Match.objects.select_for_update().filter(post=post, status__in=Match.LIVE_STATUSES).order_by("pk"):
@@ -73,7 +78,7 @@ def _record_swipe(user, post_id, action):
         if action not in [Swipe.Action.INTERESTED, Swipe.Action.PASS]:
             return SwipeResult(SwipeOutcome.INVALID_ACTION, post.id), created_match
 
-        existing = Match.objects.filter(post=post, swiper=user).first()
+        existing = Match.objects.filter(post=post, swiper=user).order_by("-created_at", "-pk").first()
         if action == Swipe.Action.INTERESTED and existing:
             return SwipeResult(SwipeOutcome.MATCH_EXISTS, post.id, existing.pk), created_match
 
@@ -88,23 +93,16 @@ def _record_swipe(user, post_id, action):
         if post.status != ActivityPost.Status.ACTIVE or post.is_expired or post.activity_window_end <= timezone.now():
             return SwipeResult(SwipeOutcome.INACTIVE_POST, post.id), created_match
 
-        Swipe.objects.update_or_create(user=user, post=post, defaults={"action": action})
-        if _post_is_full(post):
-            return SwipeResult(SwipeOutcome.FULL_POST, post.id), created_match
-
         if not settings.PLUSONE_NEW_MATCHES_ENABLED:
             return SwipeResult(SwipeOutcome.TRY_AGAIN, post.id), created_match
-        match, created = Match.objects.get_or_create(
+        Swipe.objects.update_or_create(user=user, post=post, defaults={"action": action})
+        match = Match.objects.create(
             post=post,
             swiper=user,
-            defaults={
-                "poster": post.user,
-                "status": Match.Status.WAITING,
-                "waiting_expires_at": min(timezone.now() + timedelta(minutes=10), post.expire_time),
-            },
+            poster=post.user,
+            status=Match.Status.WAITING,
+            waiting_expires_at=min(timezone.now() + timedelta(minutes=10), post.matching_deadline),
         )
-        if not created:
-            return SwipeResult(SwipeOutcome.MATCH_EXISTS, post.id, match.id), created_match
 
         from plusone.services.meetups import initialize_plan_locked
         initialize_plan_locked(match)
@@ -134,8 +132,10 @@ def _swipe_lock_fallback(user, post_id, action):
     post = get_object_or_404(ActivityPost.objects.select_related("user", "location"), id=post_id)
     if post.user_id == user.id:
         return SwipeResult(SwipeOutcome.OWN_POST, post.id)
+    if identities_retired([user.pk, post.user_id]) or blocked_between(user.pk, post.user_id):
+        return SwipeResult(SwipeOutcome.INACTIVE_POST, post.id)
 
-    existing_match = Match.objects.filter(post=post, swiper=user).first()
+    existing_match = Match.objects.filter(post=post, swiper=user).order_by("-created_at", "-pk").first()
     if existing_match:
         return SwipeResult(SwipeOutcome.MATCH_EXISTS, post.id, existing_match.id)
 
@@ -148,6 +148,66 @@ def _swipe_lock_fallback(user, post_id, action):
         return SwipeResult(SwipeOutcome.PASSED, post.id)
     if _post_is_full(post):
         return SwipeResult(SwipeOutcome.FULL_POST, post.id)
-    if post.status != ActivityPost.Status.ACTIVE or post.activity_window_end <= timezone.now():
+    if post.status != ActivityPost.Status.ACTIVE or post.matching_deadline <= timezone.now():
         return SwipeResult(SwipeOutcome.INACTIVE_POST, post.id)
     return SwipeResult(SwipeOutcome.TRY_AGAIN, post.id)
+
+
+def waiting_timed_out(match):
+    return (match.status == Match.Status.EXPIRED and match.close_reason == Match.CloseReason.TIMEOUT
+            and match.waiting_expires_at is not None and match.chat_started_at is None)
+
+
+def waiting_retry_state(match, user):
+    if not match.is_participant(user):
+        return {"can_retry": False, "later_attempt_url": None,
+                "reason": "Only the two participants can view this invitation's next steps."}
+    child = Match.objects.filter(retry_of_id=match.pk).first()
+    if child:
+        return {"can_retry": False, "later_attempt_url": reverse("chat", args=[child.pk]),
+                "reason": "A later attempt already exists. Open it to see its current status."}
+    can_retry = bool(waiting_timed_out(match)
+                     and match.post.status == ActivityPost.Status.ACTIVE
+                     and match.post.matching_deadline > timezone.now()
+                     and not identities_retired(match.participant_ids())
+                     and not blocked_between(match.poster_id, match.swiper_id)
+                     and not _post_is_full(match.post) and settings.PLUSONE_NEW_MATCHES_ENABLED)
+    return {"can_retry": can_retry, "later_attempt_url": None,
+            "reason": "You can invite the same Plus One again while this card is still available." if can_retry
+                      else "This attempt stays in history. Browse other plans or publish a new card if you still want to meet."}
+
+
+def retry_waiting_match(user, match_id):
+    """An explicit, one-child retry; replay never restarts either attempt."""
+    target = get_object_or_404(Match.objects.only("post_id", "poster_id", "swiper_id"), pk=match_id)
+    if not target.is_participant(user):
+        raise RequestError("Only the two participants can invite each other again.", 403)
+    with locked_post(target.post_id, user.pk, target.participant_ids()) as post:
+        prior = get_object_or_404(Match.objects.select_for_update(), pk=match_id)
+        prior.post = post
+        if identities_retired(prior.participant_ids()) or blocked_between(prior.poster_id, prior.swiper_id):
+            raise RequestError("This invitation is no longer available.", 409)
+        child = Match.objects.filter(retry_of=prior).first()
+        if child:
+            return SwipeResult(SwipeOutcome.MATCH_EXISTS, post.pk, child.pk)
+        expire_locked(prior)
+        if not waiting_timed_out(prior):
+            raise RequestError("Only a waiting room that timed out before chat began can be invited again.", 409)
+        # The card/user locks also fence another guest or a simultaneous retry.
+        for current in Match.objects.select_for_update().filter(post=post, status__in=Match.LIVE_STATUSES).order_by("pk"):
+            current.post = post
+            expire_locked(current)
+        if post.matching_deadline <= timezone.now() or post.status != ActivityPost.Status.ACTIVE or _post_is_full(post):
+            raise RequestError("This card is no longer available for another invitation. Browse other plans or publish a new card.", 409)
+        if not settings.PLUSONE_NEW_MATCHES_ENABLED:
+            raise RequestError("New invitations are paused. Your earlier attempt is kept.", 409)
+        child = Match.objects.create(post=post, poster_id=prior.poster_id, swiper_id=prior.swiper_id,
+            status=Match.Status.WAITING, retry_of=prior,
+            waiting_expires_at=min(timezone.now() + timedelta(minutes=10), post.matching_deadline))
+        from plusone.services.meetups import initialize_plan_locked
+        initialize_plan_locked(child)
+        post.status = ActivityPost.Status.MATCHED
+        post.save(update_fields=["status", "updated_at"])
+        log_event(ProductEvent.Name.MATCH_CREATED, user=user, match=child,
+                  properties={"activity_type": post.activity_type, "retry_of": prior.pk})
+        return SwipeResult(SwipeOutcome.MATCH_CREATED, post.pk, child.pk)

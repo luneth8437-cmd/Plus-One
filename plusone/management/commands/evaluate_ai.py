@@ -49,11 +49,11 @@ def _expected_date(spec, now):
             if case_dt < now - timedelta(minutes=15):
                 expected += timedelta(days=1)
         return expected
-    candidate_year = today.year
+    candidate_year = date_spec.get("year", today.year)
     from datetime import date as date_cls
 
     candidate = date_cls(candidate_year, date_spec["month"], date_spec["day"])
-    if candidate < today - timedelta(days=1):
+    if "year" not in date_spec and candidate < today - timedelta(days=1):
         candidate = date_cls(candidate_year + 1, date_spec["month"], date_spec["day"])
     return candidate
 
@@ -117,6 +117,20 @@ def evaluate_parsing(parse_fn):
         if expected.get("start_time_required"):
             score(case, "time_present", bool(draft.get("start_time")), "start_time empty")
 
+        if "end" in expected:
+            end = _parse_local(draft.get("expected_end_time"))
+            if expected["end"] is None:
+                score(case, "no_invented_end", end is None, f"got {draft.get('expected_end_time')!r}")
+            elif "minutes_after_start" in expected["end"]:
+                start = _parse_local(draft.get("start_time"))
+                wanted = timedelta(minutes=expected["end"]["minutes_after_start"])
+                score(case, "end_duration", bool(start and end and end - start == wanted),
+                      f"got {draft.get('expected_end_time')!r}, want start + {wanted}")
+
+        for field, source in expected.get("field_sources", {}).items():
+            got = draft.get("field_sources", {}).get(field)
+            score(case, f"source_{field}", got == source, f"got {got!r}, want {source!r}")
+
         for code in expected.get("warnings", []):
             fired = any(w.get("code") == code for w in validation.get("warnings", []))
             score(case, f"warning_{code}", fired, "warning not fired")
@@ -139,7 +153,7 @@ def evaluate_parsing(parse_fn):
         "p95_ms": round(1000 * ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))]),
         "max_ms": round(1000 * ordered[-1]),
     } if ordered else None
-    return {"cases": results, "fields": summary, "failed_case_count": len(failed_cases),
+    return {"suite_version": "2026-10-publishing-accuracy", "cases": results, "fields": summary, "failed_case_count": len(failed_cases),
             "case_count": len(results), "latency": latency}
 
 
@@ -264,7 +278,10 @@ def render_markdown(parsing, moderation, strategy, openers=None):
         "",
         f"- Date: {now.strftime('%Y-%m-%d %H:%M %Z')}",
         f"- Pipeline: {strategy}",
+        f"- Parsing suite: {parsing.get('suite_version', 'legacy')}",
         f"- Parsing cases: {parsing['case_count']} ({parsing['failed_case_count']} with failures)",
+        "- October suite changes: unresolved mensa/gym/dining-hall names remain blank; ending times and source provenance are scored.",
+        "- This fixed-case benchmark is not a real-user study or evidence of live provider quality. Historical July reports use different expectations.",
     ]
     lat = parsing.get("latency")
     if lat:
@@ -346,7 +363,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if not CampusLocation.objects.exists():
             self.stdout.write(self.style.WARNING(
-                "No campus locations found. Run python manage.py seed_demo first."))
+                "No campus locations found. Configure the real campus catalog in Django admin before evaluating drafts."))
             return
 
         if options["use_llm"]:

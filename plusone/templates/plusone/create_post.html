@@ -1,88 +1,94 @@
 {% extends "plusone/base.html" %}
 {% block title %}Create | Plus One{% endblock %}
 {% block content %}
+{# The first submit control owned by this form is always Publish, including without JavaScript. #}
+<button type="submit" form="create-reviewed-form" name="action" value="publish" class="sr-only" tabindex="-1" aria-hidden="true" data-default-publish-submit>Publish reviewed card</button>
 <section class="hero compact create-hero">
   <div>
-    <p class="eyebrow">Quick plan builder</p>
-    <h1>Create a temporary Plus One card.</h1>
-    <p class="lead">Write your plan casually, then review the details before publishing.</p>
+    <p class="eyebrow">Your real plan</p>
+    <h1>Create a Plus One.</h1>
+    <p class="lead">Fill in the details below. AI drafting is optional.</p>
+    {% if campus_name or campus_timezone %}<p class="campus-context">{% if campus_name %}{{ campus_name }} · {% endif %}{% if campus_timezone %}All times: {{ campus_timezone }}{% endif %}</p>{% endif %}
   </div>
 </section>
 
-<section class="two-column create-layout">
-  <article class="panel">
-    <h2>1. Tell Plus One your plan</h2>
-    <form method="post" class="stacked-form">
-      {% csrf_token %}
-      {{ assist_form.as_p }}
-      <button class="primary-action" name="action" value="assist">Draft my card</button>
-    </form>
-  </article>
+{% if draft_proposal %}
+  {{ draft_proposal|json_script:"activity-draft-proposal" }}
+  <section class="panel draft-proposal" data-draft-proposal aria-labelledby="draft-proposal-title">
+    <p class="eyebrow">Suggested draft</p>
+    <h2 id="draft-proposal-title">Choose whether to use these suggestions.</h2>
+    <p>Your reviewed fields have been kept. Applying this draft replaces them; you can edit every detail before publishing.</p>
+    <dl class="proposal-details">
+      <div><dt>Title</dt><dd data-draft-field="title">{{ draft_proposal.fields.title|default:"Choose a title" }}</dd></div>
+      <div><dt>Description</dt><dd data-draft-field="description">{{ draft_proposal.fields.description|default:"No description suggested" }}</dd></div>
+      <div><dt>Location</dt><dd data-draft-field="location">{{ draft_proposal.location_label|default:"Choose a location after applying" }}</dd></div>
+      <div><dt>Start time</dt><dd data-draft-field="start_time">{{ draft_proposal.fields.start_time|default:"Choose a start time" }}</dd></div>
+      <div><dt>Expected end</dt><dd data-draft-field="expected_end_time">{{ draft_proposal.fields.expected_end_time|default:"Choose an end time" }}</dd></div>
+    </dl>
+    <div class="draft-source-hints" data-draft-source-hints>
+      <p>Suggestions are a draft. A blank location or time still needs your choice.</p>
+      {% if draft_proposal.field_sources.expected_end_time == "default" or draft_proposal.field_sources.expected_end_time == "inferred" or draft_proposal.field_sources.expected_end_time == "suggested" %}<p>The suggested end time is an estimate. Check it against your plan.</p>{% endif %}
+      {% if draft_proposal.field_sources.location == "inferred" or draft_proposal.field_sources.location == "default" %}<p>The location was suggested from your text. Confirm the actual place before publishing.</p>{% endif %}
+    </div>
+    {% if draft_proposal.warnings %}<ul class="draft-warnings">{% for warning in draft_proposal.warnings %}<li>{{ warning.message|default:warning }}</li>{% endfor %}</ul>{% endif %}
+    <div class="proposal-actions">
+      <button type="submit" form="create-reviewed-form" formnovalidate name="action" value="apply_draft" class="primary-action" data-apply-draft-proposal>Apply suggested draft</button>
+      <button type="submit" form="create-reviewed-form" formnovalidate name="action" value="keep_reviewed_draft" class="secondary-action" data-keep-reviewed-draft>Keep my reviewed fields</button>
+    </div>
+  </section>
+{% endif %}
 
-  <article class="panel">
-    <h2>2. Review and publish</h2>
+<section class="two-column create-layout create-layout-v2">
+  <article class="panel create-manual-panel">
+    <div class="panel-heading"><h2>Activity details</h2><button type="submit" form="create-reviewed-form" formnovalidate name="action" value="discard_draft" class="text-action" data-clear-create-draft>Discard draft and start again</button></div>
+    <p class="form-status" data-create-draft-status role="status" aria-live="polite" hidden></p>
     {% if draft_check and draft_check.warnings %}
       <section class="draft-warnings" aria-label="Draft needs attention">
-        <p class="eyebrow">Check the draft</p>
-        <ul>
-          {% for warning in draft_check.warnings %}
-            <li data-draft-warning="{{ warning.code }}">{{ warning.message }}</li>
-          {% endfor %}
-          {% for correction in draft_check.corrections %}
-            <li data-draft-warning="corrected_{{ correction.field }}">{{ correction.message }}</li>
-          {% endfor %}
-        </ul>
+        <p class="eyebrow">Check these details</p>
+        <ul>{% for warning in draft_check.warnings %}<li data-draft-warning="{{ warning.code }}">{{ warning.message }}</li>{% endfor %}{% for correction in draft_check.corrections %}<li data-draft-warning="corrected_{{ correction.field }}">{{ correction.message }}</li>{% endfor %}</ul>
       </section>
     {% endif %}
     {% if time_options %}
       <section class="time-clarifier" aria-label="Confirm start time">
-        <p class="eyebrow">Time needs confirmation</p>
-        <h3>You wrote an hour without AM or PM.</h3>
-        <div class="time-option-row">
-          {% for option in time_options %}
-            <button type="button" class="secondary-action compact" data-time-option="{{ option.value }}">
-              {{ option.label }} · {{ option.display }}
-            </button>
-          {% endfor %}
-        </div>
+        <p class="eyebrow">Choose AM or PM</p>
+        <div class="time-option-row">{% for option in time_options %}<button type="button" class="secondary-action compact" data-time-option="{{ option.value }}">{{ option.label }} · {{ option.display }}</button>{% endfor %}</div>
+        <noscript><p class="helptext">Enter your chosen time in the start-time field below.</p></noscript>
       </section>
     {% endif %}
-    <form method="post" class="stacked-form" data-create-publish-form>
-      {% csrf_token %}
+    <form method="post" id="create-reviewed-form" class="stacked-form" data-create-publish-form data-assist-form data-restore-create-draft="{{ create_restore_draft|yesno:'true,false' }}" data-review-token="{{ create_review_token }}" data-server-draft-revision="{{ create_draft_revision }}">
+      {% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}">
       <input type="hidden" name="request_id" value="{{ request_id }}" data-request-id>
       <input type="hidden" name="raw_text" value="{{ raw_text }}">
+      <input type="hidden" name="reviewed_payload" value="{{ reviewed_payload_json }}">
+      <input type="hidden" name="proposal_payload" value="{{ draft_proposal_json }}">
+      <input type="hidden" name="review_token" value="{{ create_review_token }}">
+      <input type="hidden" name="draft_revision" value="{{ create_draft_revision }}" data-create-draft-revision>
+      <details class="optional-assist" data-assist-panel{% if assist_form.errors %} open{% endif %}>
+        <summary>Optional: draft from a sentence</summary>
+        <p>Describe your actual plan. Suggestions appear separately; your existing details stay available until you choose to apply a draft.</p>
+        {{ assist_form.non_field_errors }}
+        <label for="id_raw_text">Tell Plus One what you want to do</label>
+        {{ assist_form.raw_text.errors }}
+        <textarea id="id_raw_text" name="assist_text" maxlength="2000" rows="3" placeholder="Example: Study tomorrow from 19:00 to 20:30 at the Main Library.">{{ assist_form.raw_text.value|default:'' }}</textarea>
+        <button type="submit" class="secondary-action" name="action" value="assist" formnovalidate>Draft my card</button>
+      </details>
       {{ post_form.as_p }}
       {% if date_confirm_message %}
-        <section class="draft-warnings" aria-label="Confirm start date">
-          <p data-draft-warning="publish_date_mismatch">{{ date_confirm_message }}</p>
-          <label class="inline-checkbox">
-            <input type="checkbox" name="confirm_date" value="yes">
-            Yes, this date is correct.
-          </label>
-        </section>
+        <section class="draft-warnings" aria-label="Confirm start date"><p data-draft-warning="publish_date_mismatch">{{ date_confirm_message }}</p><label class="inline-checkbox"><input type="checkbox" name="confirm_date" value="yes"> Yes, this date is correct.</label></section>
       {% endif %}
+      <p class="helptext">Publish only a plan you intend to join. Your card is available for recruiting until its deadline or the activity ends. A match temporarily reserves it.</p>
       <button class="primary-action coral" name="action" value="publish" data-publish-submit>Publish temporary card</button>
       <p class="form-status" data-publish-status role="status" aria-live="polite" hidden></p>
-      <div class="request-recovery-actions" data-publish-recovery-actions hidden>
-        <button type="button" class="secondary-action compact" data-restore-publish-request>Restore uncertain request</button>
-        <button type="button" class="secondary-action compact" data-new-publish-request>Use edits as a new request</button>
-      </div>
+      <details data-publish-original-details hidden><summary>Earlier publication details</summary><dl data-publish-original-fields></dl></details>
+      <div class="request-recovery-actions" data-publish-recovery-actions hidden><button type="button" class="secondary-action compact" data-restore-publish-request>Check earlier publication</button><button type="button" class="secondary-action compact" data-new-publish-request>Use current edits as a new request</button></div>
     </form>
+    <noscript><p class="notice">You can fill and publish this form without JavaScript. Automatic draft saving and the live preview need JavaScript. Keep this page open while reviewing.</p></noscript>
   </article>
 
   <article class="activity-card create-preview color-{{ post_preview.activity_type }}" aria-label="Live card preview">
-    <div class="card-meta">
-      <span data-post-preview-activity>{{ post_preview.activity_label }}</span>
-      <span><span data-post-preview-expire>{{ post_preview.expire_minutes }}</span>m live</span>
-    </div>
-    <h2 data-post-preview-title>{{ post_preview.title }}</h2>
-    <p data-post-preview-description>{{ post_preview.description }}</p>
-    <div class="chips">
-      <span data-post-preview-location>{{ post_preview.location }}</span>
-      <span data-post-preview-time>{{ post_preview.start_time }}</span>
-      <span data-post-preview-end>{{ post_preview.expected_end_time }}</span>
-      <span>Anonymous student</span>
-    </div>
+    <div class="card-meta"><span data-post-preview-activity>{{ post_preview.activity_label }}</span><span><span data-post-preview-expire>{{ post_preview.expire_minutes }}</span>m recruiting</span></div>
+    <h2 data-post-preview-title>{{ post_preview.title }}</h2><p data-post-preview-description>{{ post_preview.description }}</p>
+    <div class="chips"><span data-post-preview-location>{{ post_preview.location }}</span><span data-post-preview-time>{{ post_preview.start_time }}</span><span data-post-preview-end>{{ post_preview.expected_end_time }}</span><span>Temporary guest</span></div>
   </article>
 </section>
 {% endblock %}

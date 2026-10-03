@@ -1,19 +1,24 @@
 {% extends "plusone/base.html" %}
 {% block title %}Discover | Plus One{% endblock %}
 {% block content %}
+{% url 'discover' as discover_url %}
+{% now 'c' as page_server_time %}
+{% if not new_matches_enabled %}<p class="notice" role="status">New matches are temporarily paused. You can review cards and existing plans. Interested will be available again when matching resumes.</p>{% endif %}
 <section class="hero compact">
   <div>
     <p class="eyebrow">Decision queue</p>
-    <h1>Pick one plan. Decide fast.</h1>
-    <p class="lead">Browse live campus plans with a temporary identity. Join to enter an anonymous waiting room; the five-minute vibe chat begins when you are both there.</p>
+    <h1>Find your next Plus One.</h1>
+    <p class="lead">Choose a real plan. Interested opens a waiting room; your five-minute chat starts when you both join.</p>
   </div>
   <a class="primary-action" href="{% url 'create_post' %}">Create a Plus One</a>
 </section>
 
-<form class="filterbar" method="get">
+<details class="discovery-filters"{% if filters_active %} open{% endif %}>
+  <summary>Filter plans{% if filters_active %}<span class="filter-active-label">Filters active</span>{% endif %}</summary>
+<form class="filterbar" method="get" action="{{ discover_url }}">
   <label>
     Activity
-    <select name="activity_type">
+    <select name="activity_type" id="filter-activity">
       <option value="">All types</option>
       {% for value, label in activity_types %}
         <option value="{{ value }}" {% if selected_activity_type == value %}selected{% endif %}>{{ label }}</option>
@@ -22,7 +27,7 @@
   </label>
   <label>
     Location
-    <select name="location">
+    <select name="location" id="filter-location">
       <option value="">All locations</option>
       {% for location in locations %}
         <option value="{{ location.id }}" {% if selected_location == location.id|stringformat:"s" %}selected{% endif %}>{{ location.name }}</option>
@@ -31,27 +36,31 @@
   </label>
   <label>
     Time
-    <select name="time_window">
+    <select name="time_window" id="filter-time">
       <option value="">Any time</option>
       <option value="now" {% if selected_time_window == "now" %}selected{% endif %}>Next 2 hours</option>
       <option value="today" {% if selected_time_window == "today" %}selected{% endif %}>Today</option>
     </select>
   </label>
   <button type="submit">Filter</button>
+  {% if filters_active %}<a class="details" href="{{ discover_url }}">Clear filters</a>{% endif %}
 </form>
+</details>
 
 {% if matched_match %}
-  <section class="match-modal" aria-label="Match confirmation">
+  <p class="notice match-created-notice">Your waiting room is ready. <button type="button" class="text-action" data-open-match-dialog data-dialog-target="match-confirmation" data-js-only hidden>Review waiting room</button></p>
+  <dialog class="match-modal" id="match-confirmation" data-match-dialog open aria-labelledby="match-dialog-title" aria-describedby="match-dialog-description">
     <div class="match-dialog">
-      <p class="eyebrow">Match</p>
-      <h2>It's a vibe.</h2>
-      <p>Your anonymous waiting room for <strong>{{ matched_match.post.title }}</strong> is open. The five-minute chat starts when you are both there.</p>
+      <p class="eyebrow">Waiting room created</p>
+      <h2 id="match-dialog-title">Meet your Plus One in chat.</h2>
+      <p id="match-dialog-description">Your waiting room for <strong>{{ matched_match.post.title }}</strong> is open. The five-minute chat starts when you both join.</p>
       <div class="modal-actions">
-        <a class="primary-action" href="{% url 'chat' matched_match.id %}">Open chat</a>
-        <a class="details" href="{% url 'discover' %}">Keep swiping</a>
+        <a class="primary-action" href="{% url 'chat' matched_match.id %}" autofocus>Open chat</a>
+        <a class="details" href="{{ return_to|default:discover_url }}">Keep swiping</a>
+        <form method="dialog"><button type="submit" class="text-action">Close confirmation</button></form>
       </div>
     </div>
-  </section>
+  </dialog>
 {% endif %}
 
 {% if undo_pass_post %}
@@ -61,21 +70,23 @@
       <span>Undo if that was a mis-tap. This stays available while you keep browsing.</span>
     </div>
     <form method="post" action="{% url 'undo_pass' undo_pass_post.id %}">
-      {% csrf_token %}
+      {% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}">
+      <input type="hidden" name="return_to" value="{{ return_to|default:discover_url }}">
       <button class="secondary-action compact" type="submit">Undo pass</button>
     </form>
   </section>
 {% endif %}
 
-<section class="card-grid decision-grid">
+<section class="card-grid decision-grid" data-discover-queue data-discovery-server-time="{{ page_server_time }}">
   {% for post in posts %}
-    <article class="activity-card decision-card color-{{ post.activity_type }}{% if post.user_id == user.id %} own-card{% endif %}">
+    <article class="activity-card decision-card color-{{ post.activity_type }}{% if post.user_id == user.id %} own-card{% endif %}" data-matchable-card data-matching-deadline="{{ post.matching_deadline|date:'c' }}" data-deadline="{{ post.matching_deadline|date:'c' }}">
       <div class="card-meta">
         <span>{{ post.get_activity_type_display }}</span>
         <span>1-on-1</span>
-        <span>expires in <span class="countdown" data-deadline="{{ post.expire_time|date:'c' }}" data-fallback="soon">--</span></span>
+        <span>Recruiting closes in <span class="countdown" data-deadline="{{ post.matching_deadline|date:'c' }}" data-fallback="closed">--</span></span>
       </div>
-      <h2>{{ post.title }}</h2>
+      <p class="notice" data-card-expiry-notice hidden>Recruiting has closed for this card. <a href="{{ return_to|default:discover_url }}">See latest cards</a></p>
+      <h2 id="card-title-{{ post.id }}">{{ post.title }}</h2>
       <p>{{ post.description|truncatechars:130 }}</p>
       <div class="chips">
         <span>{{ post.location.name }}</span>
@@ -84,38 +95,41 @@
         {% if post.user_id == user.id %}
           <span>Your live card</span>
         {% else %}
-          <span>Posted by anonymous student</span>
+          <span>Posted by a temporary guest</span>
         {% endif %}
       </div>
       {% if post.user_id == user.id %}
         <p class="notice owner-notice">Your card is live.</p>
         <div class="swipe-row owner-actions">
-          <a class="details" href="{% url 'post_detail' post.id %}">View</a>
-          <a class="primary-action" href="{% url 'edit_post' post.id %}">Edit this card</a>
+          <a class="details" href="{% url 'post_detail' post.id %}?return_to={{ return_to|default:discover_url|urlencode }}">View</a>
+          <a class="primary-action" data-card-live-action href="{% url 'edit_post' post.id %}">Edit this card</a>
         </div>
       {% else %}
         <div class="swipe-row decision-actions">
           <form method="post" action="{% url 'swipe_post' post.id %}">
-            {% csrf_token %}
-            <button class="round pass" name="action" value="pass" aria-label="Pass">×</button>
+            {% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}">
+            <input type="hidden" name="return_to" value="{{ return_to|default:discover_url }}">
+            <button class="secondary-action pass" name="action" value="pass" aria-label="Pass" aria-describedby="card-title-{{ post.id }}">Pass</button>
           </form>
-          <a class="details" href="{% url 'post_detail' post.id %}">Details</a>
-          <form method="post" action="{% url 'swipe_post' post.id %}">
-            {% csrf_token %}
-            <button class="round join" name="action" value="interested" aria-label="Interested">♥</button>
+          <a class="details" href="{% url 'post_detail' post.id %}?return_to={{ return_to|default:discover_url|urlencode }}" aria-describedby="card-title-{{ post.id }}">Details</a>
+          <form method="post" action="{% if post.retry_match_id %}{% url 'retry_waiting' post.retry_match_id %}{% else %}{% url 'swipe_post' post.id %}{% endif %}">
+            {% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}">
+            <input type="hidden" name="return_to" value="{{ return_to|default:discover_url }}">
+            <button class="primary-action join" data-card-interest name="action" value="interested" aria-label="{% if post.retry_match_id %}Invite again{% else %}Interested{% endif %}" aria-describedby="card-title-{{ post.id }}"{% if not new_matches_enabled %} disabled{% endif %}>{% if post.retry_match_id %}Invite again{% else %}Interested{% endif %}</button>
           </form>
         </div>
+        {% if post.retry_match_id %}<p class="helptext">Your earlier wait ended before chat began. Invite this Plus One again to open a new waiting room.</p>{% endif %}
       {% endif %}
     </article>
   {% empty %}
     <section class="empty-state discover-empty">
       <div>
         <p class="eyebrow">Queue is quiet</p>
-        <h2>No cards are ready for this queue.</h2>
+        <h2>No activities here right now.</h2>
         {% if filters_active %}
           <p>Your filters may be hiding live plans. Clear them, or start the next campus plan yourself.</p>
         {% else %}
-          <p>Start the next campus plan, or refresh in a moment as new temporary cards go live.</p>
+          <p>No activities are available in this queue. Post a plan you intend to join, or check again later.</p>
         {% endif %}
       </div>
       <div class="empty-state-actions">
@@ -126,7 +140,7 @@
         <a class="details" href="{% url 'discover' %}">See latest cards</a>
       </div>
       <div class="empty-state-hints" aria-label="What happens next">
-        <span>New cards appear as students post.</span>
+        <span>New cards appear when people publish their plans.</span>
         <span>Skipped cards can be restored right after a pass.</span>
         <span>Matches open a short anonymous chat.</span>
       </div>

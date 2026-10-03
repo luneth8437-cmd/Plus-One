@@ -71,9 +71,10 @@ class LifecycleTests(Fixtures, TestCase):
     def test_only_two_recent_foreground_signals_activate_once(self):
         match = self.waiting()
         set_presence(match.pk, self.poster, True)
-        Match.objects.filter(pk=match.pk).update(poster_last_present_at=timezone.now() - timedelta(seconds=16))
-        self.assertEqual(set_presence(match.pk, self.guest, True).status, Match.Status.WAITING)
-        current = set_presence(match.pk, self.poster, True)
+        after_lease = timezone.now() + timedelta(seconds=16)
+        with patch("plusone.services.lifecycle.timezone.now", return_value=after_lease):
+            self.assertEqual(set_presence(match.pk, self.guest, True).status, Match.Status.WAITING)
+            current = set_presence(match.pk, self.poster, True)
         self.assertEqual(current.status, Match.Status.CHATTING)
         deadline = current.chat_expires_at
         self.assertEqual(deadline - current.chat_started_at, timedelta(minutes=5))
@@ -414,7 +415,9 @@ class PostgreSQLConcurrencyTests(Fixtures, TransactionTestCase):
     def test_simultaneous_duplicate_messages_are_saved_once(self):
         match = self.chatting()
         key = uuid4()
-        for _ in range(29):
+        # Both concurrent calls may reach moderation before either durable
+        # message exists. Each actual attempt has budget; only one is saved.
+        for _ in range(28):
             consume_limit(self.poster, "message")
         results = self.parallel([lambda: create_chat_message(match, self.poster, "Hello", key), lambda: create_chat_message(match, self.poster, "Hello", key)])
         self.assertEqual(results[0][0].pk, results[1][0].pk)

@@ -8,6 +8,58 @@ from django.utils import timezone
 from plusone.models import UserProfile
 
 
+class BrowserBudgetMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.path_info in ALWAYS_EXCLUDED_PATHS or request.path_info.startswith("/static/"):
+            return self.get_response(request)
+        from django.conf import settings
+        from plusone.services.browser_budget import COOKIE_AGE, prepare_budget
+        prepare_budget(request)
+        response = self.get_response(request)
+        value = getattr(request, "browser_budget_cookie", None)
+        if value:
+            response.set_cookie(settings.PLUSONE_BROWSER_BUDGET_COOKIE, value, max_age=COOKIE_AGE,
+                                httponly=True, secure=not settings.DEBUG, samesite="Lax")
+        return response
+
+    def process_exception(self, request, exception):
+        from django.http import HttpResponse
+        from plusone.services.requests import RequestError
+        if not isinstance(exception, RequestError):
+            return None
+        response = HttpResponse(str(exception), status=exception.status, content_type="text/plain")
+        if exception.retry_after:
+            response["Retry-After"] = str(exception.retry_after)
+        return response
+
+    def process_view(self, request, view_func, view_args, view_kwargs):
+        if request.method != "POST":
+            return None
+        import json
+        from django.http import HttpResponse, JsonResponse
+        from plusone.context_processors import session_scope
+        if request.content_type == "application/json":
+            try:
+                payload = json.loads(request.body)
+            except (ValueError, UnicodeDecodeError):
+                return JsonResponse({"ok": False, "error": "Invalid JSON."}, status=400)
+            scope = payload.get("session_scope") if isinstance(payload, dict) else None
+        else:
+            scope = request.POST.get("session_scope")
+        # Old API clients can omit this UI fence; current forms and JS always
+        # include it, so a tab belonging to a retired identity cannot mutate
+        # the new identity even with this browser's refreshed CSRF cookie.
+        if scope is not None and scope != session_scope(request.user):
+            message = "Your browser identity changed. Refresh this page before continuing."
+            if "application/json" in request.headers.get("Accept", "") or request.content_type == "application/json":
+                return JsonResponse({"ok": False, "error": message, "identity_changed": True}, status=409)
+            return HttpResponse(message, status=409, content_type="text/plain")
+        return None
+
+
 LAST_SEEN_WRITE_INTERVAL = timedelta(minutes=5)
 ALWAYS_EXCLUDED_VIEW_NAMES = {
     "healthz",

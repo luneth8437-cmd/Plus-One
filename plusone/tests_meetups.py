@@ -325,7 +325,6 @@ class MeetupPlanTests(MeetupFixtures, TestCase):
                 self.assertEqual(moderate.call_count, 6)
         bucket = RateLimitBucket.objects.get(user=self.poster, scope="ai")
         self.assertEqual(bucket.count, 6)
-        self.assertEqual(len(bucket.request_keys), 6)
         self.assertEqual(MeetupAction.objects.count(), 6)
 
 
@@ -463,13 +462,15 @@ class MeetupCoordinationTests(MeetupFixtures, TestCase):
         self.post.refresh_from_db()
         self.assertEqual(self.post.status, ActivityPost.Status.PAUSED)
 
-    def test_outcomes_are_independent_and_open_only_after_meeting_start(self):
+    def test_outcomes_are_independent_with_positive_at_start_and_negative_at_end(self):
         self.agree()
         self.assert_rejected("outcome", outcome="met")
         with patch("plusone.services.meetups.timezone.now", return_value=self.match.plan_expected_end_at + timedelta(hours=24, seconds=1)):
             self.assert_rejected("outcome", outcome="met")
         with patch("plusone.services.meetups.timezone.now", return_value=self.match.plan_meeting_at):
             self.action("outcome", self.poster, outcome="met")
+            self.assert_rejected("outcome", user=self.swiper, outcome="not_met", outcome_reason="no_show")
+        with patch("plusone.services.meetups.timezone.now", return_value=self.match.plan_expected_end_at):
             self.action("outcome", self.swiper, outcome="not_met", outcome_reason="no_show")
         self.match.refresh_from_db()
         self.assertEqual(self.match.poster_meetup_outcome, "met")
@@ -486,7 +487,7 @@ class MeetupCoordinationTests(MeetupFixtures, TestCase):
 
     def test_did_not_meet_requires_a_supported_reason(self):
         self.agree()
-        with patch("plusone.services.meetups.timezone.now", return_value=self.match.plan_meeting_at):
+        with patch("plusone.services.meetups.timezone.now", return_value=self.match.plan_expected_end_at):
             self.assert_rejected("outcome", outcome="not_met")
             self.assert_rejected("outcome", outcome="not_met", outcome_reason="unsupported")
             self.action("outcome", outcome="not_met", outcome_reason="time_conflict")

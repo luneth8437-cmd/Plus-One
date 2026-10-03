@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -88,6 +89,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "plusone.middleware.BrowserBudgetMiddleware",
     "plusone.middleware.LastSeenMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -109,6 +111,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "plusone.context_processors.open_chat_badge",
+                "plusone.context_processors.product_context",
             ],
         },
     },
@@ -162,7 +165,21 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "Asia/Shanghai"
+TIME_ZONE = os.environ.get("PLUSONE_CAMPUS_TIME_ZONE", "Asia/Shanghai").strip()
+try:
+    ZoneInfo(TIME_ZONE)
+except (ZoneInfoNotFoundError, ValueError) as exc:
+    raise ImproperlyConfigured("PLUSONE_CAMPUS_TIME_ZONE must be a valid IANA time zone.") from exc
+
+PLUSONE_CAMPUS_NAME = os.environ.get("PLUSONE_CAMPUS_NAME", "").strip()
+PLUSONE_SUPPORT_EMAIL = os.environ.get("PLUSONE_SUPPORT_EMAIL", "").strip()
+PLUSONE_BROWSER_BUDGET_COOKIE = "plusone_usage"
+PLUSONE_WEB_PUSH_ENABLED = _env_bool("PLUSONE_WEB_PUSH_ENABLED", default=False)
+PLUSONE_VAPID_PUBLIC_KEY = os.environ.get("PLUSONE_VAPID_PUBLIC_KEY", "").strip()
+PLUSONE_VAPID_PRIVATE_KEY = os.environ.get("PLUSONE_VAPID_PRIVATE_KEY", "").strip()
+PLUSONE_VAPID_SUBJECT = os.environ.get("PLUSONE_VAPID_SUBJECT", "").strip()
+PLUSONE_WEB_PUSH_ALLOWED_HOSTS = tuple(value.strip() for value in os.environ.get("PLUSONE_WEB_PUSH_ALLOWED_HOSTS",
+    "fcm.googleapis.com,updates.push.services.mozilla.com,push.services.mozilla.com,*.notify.windows.com,web.push.apple.com").split(",") if value.strip())
 
 USE_I18N = True
 

@@ -1,0 +1,15 @@
+{% extends "plusone/base.html" %}
+{% block title %}Review identity reset | Plus One{% endblock %}
+{% block content %}
+<section class="hero compact"><div><p class="eyebrow">Review before resetting</p><h1>Start a new temporary identity?</h1><p class="lead">Your current identity will lose access to its cards, chats and plans. You cannot undo this reset.</p></div></section>
+<section class="information-grid">
+  <article class="panel"><h2>These live cards will close</h2><p>{{ reset_post_count|default:0 }} card{{ reset_post_count|pluralize }}.</p><ul class="reset-summary-list">{% for post in reset_posts %}<li>{{ post.title }} · {{ post.location.name }}</li>{% empty %}<li>No live cards to close.</li>{% endfor %}</ul></article>
+  <article class="panel"><h2>These matches will close</h2><p>{{ reset_match_count|default:0 }} open match{{ reset_match_count|pluralize }}.</p><ul class="reset-summary-list">{% for match in reset_matches %}<li>{{ match.post.title }} · {{ match.get_status_display }}</li>{% empty %}<li>No open waiting rooms or chats.</li>{% endfor %}</ul></article>
+  <article class="panel"><h2>These meetups will be cancelled</h2><p>{{ reset_meetup_count|default:0 }} upcoming meetup{{ reset_meetup_count|pluralize }}.</p><ul class="reset-summary-list">{% for match in reset_meetups %}<li>{{ match.post.title }} · {{ match.meeting_point|default:match.post.location.name }}{% if match.plan_meeting_at %} · {{ match.plan_meeting_at|date:"M j, H:i" }}{% endif %}</li>{% empty %}<li>No upcoming meetups to cancel.</li>{% endfor %}</ul><p>Your counterpart will see the cancellation when they check the plan or their updates.</p></article>
+  <article class="panel"><h2>History and saved content</h2><p>You will lose access to your earlier history. Resetting does not immediately erase stored messages, safety evidence or other retained records.</p><p>Already-ended meeting windows keep their historical status. They are not retroactively marked as cancelled.</p></article>
+</section>
+<form method="post" action="{% url 'reset_anonymous_identity' %}" class="reset-actions">
+  {% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}"><input type="hidden" name="confirm_reset" value="yes">
+  <button type="submit" class="primary-action coral">Confirm identity reset</button><a class="secondary-action" href="{% url 'session' %}">Keep my current identity</a>
+</form>
+{% endblock %}

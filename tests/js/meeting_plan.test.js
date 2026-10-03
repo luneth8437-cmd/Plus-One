@@ -32,7 +32,7 @@ test("confirmed history does not enable new meetup actions without current serve
 
 test("arrival and delay labels never claim that an actual meetup was verified", () => {
   assert.equal(meetupParticipantLabel("arrived", 0, ""), "Marked arrived");
-  assert.equal(meetupParticipantLabel("delayed", 10, ""), "Expecting to be 10 min late");
+  assert.equal(meetupParticipantLabel("delayed", 10, ""), "Delay reported; arrival estimate not recorded.");
   assert.equal(meetupParticipantLabel("pending", 0, ""), "Not marked arrived");
   assert.equal(meetupParticipantLabel("arrived", 0, "met"), "Reported: we met");
   assert.equal(meetupParticipantLabel("pending", 0, "not_met"), "Reported: we didn't meet");

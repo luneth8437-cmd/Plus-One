@@ -1,0 +1,11 @@
+{% extends "plusone/base.html" %}
+{% block title %}Help and safety | Plus One{% endblock %}
+{% block content %}
+<section class="hero compact"><div><p class="eyebrow">Help and safety</p><h1>Keep your plans clear and comfortable.</h1><p class="lead">You can leave a waiting room, cancel an upcoming meetup and report a concern.</p></div></section>
+<section class="information-grid">
+  <article class="panel"><h2>Find your current plan</h2><p>Return to My Plus Ones in the same browser. Open an existing match to see the current meeting point, time and cancellation status.</p><p>Agreeing confirms a plan; arrival and meetup feedback are participant self-reports. They are not verified attendance.</p><a class="primary-action" href="{% url 'dashboard' %}">My Plus Ones</a></article>
+  <article class="panel"><h2>Meet safely</h2><p>Choose a public place you know. Check the latest plan before travelling. You do not need to share contact details to use the match.</p><p>If you cannot attend, cancel the upcoming meetup from its plan. The other guest should check the latest status before travelling; browser alerts are not a guaranteed delivery channel.</p></article>
+  <article class="panel"><h2>Report and block</h2><p>Report a public card from its details, or use the safety panel in your match. Describe the concern without sharing unnecessary personal information.</p><p>Blocking prevents further contact from that known guest identity. It cannot guarantee that the same person will not return with another temporary identity.</p><a class="details" href="{% url 'notifications' %}">My updates and report status</a></article>
+  <article class="panel"><h2>Contact the operator</h2>{% if support_email %}<p>For a product or report question, contact <a href="mailto:{{ support_email }}">{{ support_email }}</a>.</p>{% else %}<p>No online support contact is configured. Contact the operator of this campus trial in person.</p>{% endif %}<p>Reports are not an emergency response service. For an immediate threat, contact local emergency services or campus security directly.</p></article>
+</section>
+{% endblock %}

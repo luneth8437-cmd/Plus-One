@@ -28,6 +28,15 @@ class UserProfile(models.Model):
         return source[:1].upper()
 
 
+class UserBlock(models.Model):
+    blocker = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="blocks_created")
+    target = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="blocks_received")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["blocker", "target"], name="unique_user_block")]
+
+
 class CampusLocation(models.Model):
     class LocationType(models.TextChoices):
         DINING = "dining", "Dining"
@@ -119,6 +128,10 @@ class ActivityPost(models.Model):
     def activity_window_end(self):
         return self.expected_end_time or self.start_time + timedelta(hours=1)
 
+    @property
+    def matching_deadline(self):
+        return min(self.expire_time, self.activity_window_end)
+
     def mark_expired_if_needed(self, save=True):
         if self.expire_time <= timezone.now() and self.status == self.Status.ACTIVE:
             self.status = self.Status.EXPIRED
@@ -170,6 +183,7 @@ class Match(models.Model):
         REPORTED = "reported", "Reported safety issue"
         CANCELLED = "cancelled", "Activity cancelled"
         RESET = "reset", "Identity reset"
+        BLOCKED = "blocked", "Blocked by participant"
         TIMEOUT = "timeout", "Timed out"
 
     LIVE_STATUSES = (Status.WAITING, Status.CHATTING)
@@ -179,6 +193,11 @@ class Match(models.Model):
         PENDING = "pending", "Not reported"
         ARRIVED = "arrived", "Arrived (self-reported)"
         DELAYED = "delayed", "Running late (self-reported)"
+
+    class CoordinationSignal(models.TextChoices):
+        AT_POINT = "at_point", "At the agreed meeting point"
+        AT_ENTRANCE = "at_entrance", "At the entrance of the agreed place"
+        CANT_FIND = "cant_find", "At the agreed point but cannot find you"
 
     post = models.ForeignKey(ActivityPost, on_delete=models.CASCADE, related_name="matches")
     poster = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="posted_matches")
@@ -198,6 +217,8 @@ class Match(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     chat_expires_at = models.DateTimeField(null=True, blank=True)
     waiting_expires_at = models.DateTimeField(null=True, blank=True)
+    retry_of = models.OneToOneField("self", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="waiting_retry")
     poster_last_present_at = models.DateTimeField(null=True, blank=True)
     swiper_last_present_at = models.DateTimeField(null=True, blank=True)
     chat_started_at = models.DateTimeField(null=True, blank=True)
@@ -216,6 +237,12 @@ class Match(models.Model):
     swiper_arrival_status = models.CharField(max_length=12, choices=ArrivalStatus.choices, default=ArrivalStatus.PENDING)
     poster_delay_minutes = models.PositiveSmallIntegerField(default=0)
     swiper_delay_minutes = models.PositiveSmallIntegerField(default=0)
+    poster_arrival_eta = models.DateTimeField(null=True, blank=True)
+    swiper_arrival_eta = models.DateTimeField(null=True, blank=True)
+    poster_arrival_updated_at = models.DateTimeField(null=True, blank=True)
+    swiper_arrival_updated_at = models.DateTimeField(null=True, blank=True)
+    poster_coordination_signal = models.CharField(max_length=20, choices=CoordinationSignal.choices, blank=True, default="")
+    swiper_coordination_signal = models.CharField(max_length=20, choices=CoordinationSignal.choices, blank=True, default="")
     poster_meetup_outcome = models.CharField(max_length=12, blank=True)
     swiper_meetup_outcome = models.CharField(max_length=12, blank=True)
     poster_outcome_reason = models.CharField(max_length=20, blank=True)
@@ -223,7 +250,8 @@ class Match(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["post", "swiper"], name="unique_match_per_post_swiper"),
+            models.UniqueConstraint(fields=["post", "swiper"], condition=Q(status__in=["waiting", "chatting"]),
+                                    name="unique_live_match_post_swiper"),
         ]
         indexes = [
             models.Index(fields=["status", "chat_expires_at"], name="match_status_exp_idx"),
@@ -248,7 +276,9 @@ class Match(models.Model):
 
     @property
     def phase_deadline(self):
-        return self.waiting_expires_at if self.status == self.Status.WAITING else self.chat_expires_at
+        if self.status == self.Status.WAITING:
+            return min(self.waiting_expires_at, self.post.matching_deadline) if self.waiting_expires_at else self.post.matching_deadline
+        return self.chat_expires_at
 
     def mark_chat_expired_if_needed(self, save=True):
         if save:
@@ -278,6 +308,21 @@ class MeetupAction(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["match", "actor", "request_id"], name="unique_meetup_action_request")]
+
+
+class PresenceLease(models.Model):
+    """An ordered foreground signal from one tab, with a short expiry."""
+
+    match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="presence_leases")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="presence_leases")
+    tab_id = models.UUIDField()
+    sequence = models.PositiveBigIntegerField(default=0)
+    visible = models.BooleanField(default=False)
+    last_visible_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["match", "user", "tab_id"], name="unique_presence_tab")]
 
 
 class ChatMessage(models.Model):
@@ -363,6 +408,13 @@ class ProductEvent(models.Model):
         MEETUP_STATUS_UPDATED = "meetup_status_updated", "Meetup status self-reported"
         MEETUP_CANCELLED = "meetup_cancelled", "Meetup cancelled"
         MEETUP_OUTCOME = "meetup_outcome", "Meetup outcome self-reported"
+        DISCOVER_VISITED = "discover_visited", "Discover visited"
+        DISCOVER_EMPTY = "discover_empty", "Discover empty"
+        CARD_IMPRESSION = "card_impression", "Card shown"
+        CREATE_STARTED = "create_started", "Create started"
+        INTERESTED_RESULT = "interested_result", "Interest result"
+        WAIT_CLOSED = "wait_closed", "Waiting closed"
+        MAINTENANCE_COMPLETED = "maintenance_completed", "Maintenance completed"
 
     name = models.CharField(max_length=40, choices=Name.choices)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
@@ -418,6 +470,29 @@ class SafetyReport(models.Model):
         return self.status != self.Status.RESOLVED and self.created_at < timezone.now() - timedelta(days=7)
 
 
+class ActivityReport(models.Model):
+    Category = SafetyReport.Category
+    Status = SafetyReport.Status
+
+    post = models.ForeignKey(ActivityPost, on_delete=models.CASCADE, related_name="activity_reports")
+    reporter = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="activity_reports_created")
+    category = models.CharField(max_length=30, choices=Category.choices, default=Category.OTHER)
+    reason = models.CharField(max_length=500, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    handling_notes = models.TextField(blank=True)
+    title_snapshot = models.CharField(max_length=120, blank=True)
+    description_snapshot = models.TextField(max_length=2000, blank=True)
+    location_snapshot = models.CharField(max_length=200, blank=True)
+    start_time_snapshot = models.DateTimeField(null=True, blank=True)
+    expected_end_time_snapshot = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["post", "reporter"], name="unique_activity_report")]
+        indexes = [models.Index(fields=["status", "created_at"], name="activity_report_status_idx")]
+
+
 class RateLimitBucket(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     scope = models.CharField(max_length=30)
@@ -428,3 +503,39 @@ class RateLimitBucket(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["user", "scope", "window_start"], name="unique_rate_limit_window")]
+
+
+class BrowserBudgetBucket(models.Model):
+    browser_key = models.CharField(max_length=64)
+    scope = models.CharField(max_length=24)
+    window_start = models.DateTimeField()
+    count = models.PositiveIntegerField(default=0)
+    expires_at = models.DateTimeField(db_index=True)
+    request_keys = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["browser_key", "scope", "window_start"], name="unique_browser_budget_window")]
+
+
+class PushSubscription(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="push_subscriptions")
+    endpoint = models.URLField(max_length=2048)
+    endpoint_digest = models.CharField(max_length=64, unique=True)
+    p256dh = models.CharField(max_length=256)
+    auth = models.CharField(max_length=256)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+
+
+class PushDelivery(models.Model):
+    subscription = models.ForeignKey(PushSubscription, on_delete=models.CASCADE, related_name="push_deliveries")
+    notification_key = models.CharField(max_length=120)
+    created_at = models.DateTimeField(auto_now_add=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    attempts = models.PositiveIntegerField(default=0)
+    next_attempt_at = models.DateTimeField(null=True, blank=True)
+    last_error_code = models.CharField(max_length=32, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["subscription", "notification_key"], name="unique_push_delivery")]

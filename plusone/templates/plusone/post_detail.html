@@ -1,11 +1,15 @@
 {% extends "plusone/base.html" %}
 {% block title %}{{ post.title }} | Plus One{% endblock %}
 {% block content %}
-<section class="detail-layout">
-  <article class="activity-card large color-{{ post.activity_type }}">
+{% url 'discover' as discover_url %}
+{% now 'c' as page_server_time %}
+<a class="details back-link" href="{{ return_to|default:discover_url }}">Back to Discover</a>
+{% if not new_matches_enabled %}<p class="notice" role="status">New matches are temporarily paused. Existing plans remain available.</p>{% endif %}
+<section class="detail-layout" data-discovery-server-time="{{ page_server_time }}">
+  <article class="activity-card large color-{{ post.activity_type }}" data-matchable-card data-matching-deadline="{{ post.matching_deadline|date:'c' }}" data-deadline="{{ post.matching_deadline|date:'c' }}">
     <div class="card-meta">
       <span>{{ post.get_activity_type_display }}</span>
-      <span class="countdown" data-deadline="{{ post.expire_time|date:'c' }}">--</span>
+      <span>Recruiting closes in <span class="countdown" data-deadline="{{ post.matching_deadline|date:'c' }}">--</span></span>
     </div>
     <h1>{{ post.title }}</h1>
     <p>{{ post.description }}</p>
@@ -17,10 +21,17 @@
       <span>1-on-1</span>
       <span>{{ post.get_status_display }}</span>
     </div>
+    {% if campus_name or campus_timezone %}<p class="campus-context">{% if campus_name %}{{ campus_name }} · {% endif %}{% if campus_timezone %}All times: {{ campus_timezone }}{% endif %}</p>{% endif %}
+    <p class="notice" data-card-expiry-notice hidden>Recruiting has closed for this card. Existing match history and confirmed plans remain available. <a href="{{ return_to|default:discover_url }}">See latest cards</a></p>
+    {% if current_match %}
+      <div class="existing-match-cta"><p>You already have a match for this plan.</p><a class="primary-action" href="{% url 'chat' current_match.id %}">{% if current_match_label %}{{ current_match_label }}{% elif current_match.status == 'waiting' %}Open waiting room{% elif current_match.status == 'chatting' %}Continue chat{% elif current_match.status == 'agreed' %}View meeting plan{% else %}View match history{% endif %}</a></div>
+      {% if waiting_retry.can_retry %}<p class="helptext">Your earlier waiting room ended before chat began. This invitation creates a new attempt and keeps the earlier history.</p><form method="post" action="{% url 'retry_waiting' current_match.id %}">{% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}"><button class="primary-action" data-card-interest type="submit">Invite again</button></form>{% endif %}
+    {% endif %}
     {% if post.user_id == user.id %}
       {% if post_is_active %}
         <p class="notice owner-notice">Your card is live.</p>
-        <a class="primary-action" href="{% url 'edit_post' post.id %}">Edit this card</a>
+        <section class="publish-next-step" aria-label="After publishing"><h2>What happens next</h2><p>Recruiting closes {{ post.matching_deadline|date:"M j, H:i" }}{% if campus_timezone %} ({{ campus_timezone }}){% endif %}. Check <a href="{% url 'dashboard' %}">My Plus Ones</a> for waiting rooms and matches. Open a waiting room when someone joins; your five-minute chat begins only when you are both there.</p><p>Check <a href="{% url 'notifications' %}">My updates</a> for reminder options. If browser alerts are unavailable, return here to check for replies and confirm the latest plan before travelling.</p></section>
+        <a class="primary-action" data-card-live-action href="{% url 'edit_post' post.id %}">Edit this card</a>
       {% elif post.status == "matched" %}
         <p class="notice owner-notice">This card has a match and is no longer in Discover.</p>
       {% elif post.status == "paused" and not post.is_expired %}
@@ -34,32 +45,57 @@
       {% else %}
         <p class="notice owner-notice">This card has expired.</p>
       {% endif %}
+    {% elif matching_unavailable %}
+      <p class="notice" data-matching-unavailable>Matching is unavailable between these guest identities. Any existing history remains available.</p>
+      <a class="details" href="{% url 'notifications' %}">Manage your safety controls</a>
     {% elif existing_swipe %}
       <p class="notice">You already swiped: {{ existing_swipe.get_action_display }}.</p>
+      {% if existing_swipe.action == 'pass' %}<form method="post" action="{% url 'undo_pass' post.id %}">{% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}"><input type="hidden" name="return_to" value="{{ return_to|default:discover_url }}"><button type="submit" class="secondary-action">Undo pass</button></form>{% endif %}
     {% elif not post_is_active %}
       <p class="notice">This Plus One is no longer active.</p>
     {% else %}
       <div class="swipe-row">
         <form method="post" action="{% url 'swipe_post' post.id %}">
-          {% csrf_token %}
-          <button class="round pass" name="action" value="pass" aria-label="Pass on this Plus One">×</button>
+          {% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}">
+          <input type="hidden" name="return_to" value="{{ return_to|default:discover_url }}">
+          <button class="secondary-action pass" name="action" value="pass" aria-label="Pass on this Plus One">Pass</button>
         </form>
         <form method="post" action="{% url 'swipe_post' post.id %}">
-          {% csrf_token %}
-          <button class="round join" name="action" value="interested" aria-label="Interested in this Plus One">♥</button>
+          {% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}">
+          <input type="hidden" name="return_to" value="{{ return_to|default:discover_url }}">
+          <button class="primary-action join" data-card-interest name="action" value="interested" aria-label="Interested in this Plus One"{% if not new_matches_enabled %} disabled{% endif %}>Interested</button>
         </form>
       </div>
     {% endif %}
   </article>
 
   <aside class="panel">
-    <h2>Match rules</h2>
+    <h2>What happens next</h2>
     <ul class="plain-list">
       <li>Post must be active and not expired.</li>
-      <li>Your temporary identity cannot swipe on its own post.</li>
-      <li>Interested swipe creates a waiting room; the five-minute chat starts when both people arrive.</li>
-      <li>Pass records the swipe without creating a match.</li>
+      <li>Interested creates a waiting room. Your five-minute chat starts when you both join.</li>
+      <li>Agree to the same meeting point and time before travelling.</li>
+      <li>Pass skips this card. You can undo a pass while it is still available.</li>
     </ul>
+    <p class="helptext">A temporary guest label does not verify someone's real identity or campus membership.</p>
+    {% if post.user_id != user.id %}
+      <details class="public-safety-panel" data-public-safety>
+        <summary>Report or block this guest</summary>
+        <p>You can report this card without starting a match. Reporting the card alone does not end existing matches or cancel meeting plans.</p>
+        <p class="helptext" data-block-consequence>Blocking this guest ends your open matches with them and cancels confirmed meetups that have not ended. Completed plans remain in history.</p>
+        <form method="post" action="{% url 'post_safety' post.id %}" class="stacked-form" data-post-report-form>
+          {% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}"><input type="hidden" name="return_to" value="{{ return_to|default:discover_url }}"><input type="hidden" name="action" value="report">
+          <label for="post-report-category">What is the concern?</label><select name="category" id="post-report-category"><option value="other">Something else</option><option value="contact">Pressure to share contact details</option><option value="harassment">Harassment</option><option value="unsafe_meeting">Unsafe activity or meeting</option></select>
+          <label for="post-report-reason">Details</label><textarea id="post-report-reason" name="reason" maxlength="500" rows="3" required></textarea>
+          <label class="inline-checkbox"><input type="checkbox" name="block_user" value="yes"> Also block this guest identity</label>
+          <button type="submit" class="secondary-action">Submit card report</button>
+        </form>
+        <form method="post" action="{% url 'post_safety' post.id %}" class="block-guest-form" data-confirm-submit="Block this guest? Your open matches with them will end and confirmed meetups that have not ended will be cancelled. Completed plans stay in history.">
+          {% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}"><input type="hidden" name="return_to" value="{{ return_to|default:discover_url }}"><input type="hidden" name="action" value="block"><button type="submit" class="text-action">Block this guest identity</button>
+        </form>
+        <p class="helptext">A person may return under a different temporary identity. Check report status and manage blocks in <a href="{% url 'notifications' %}">My updates</a>.</p>
+      </details>
+    {% endif %}
   </aside>
 </section>
 {% endblock %}

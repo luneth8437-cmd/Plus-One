@@ -63,7 +63,9 @@ def ensure_anonymous_session(request):
     username = request.session.get(ANONYMOUS_SESSION_USERNAME_KEY)
     User = get_user_model()
     user = User.objects.filter(username=username).first() if username else None
-    if user is None:
+    if user is None or not user.is_active or UserProfile.objects.filter(user=user, retired_at__isnull=False).exists():
+        from plusone.services.browser_budget import consume_browser_limit
+        consume_browser_limit(request, "identity")
         user = create_anonymous_user()
         request.session[ANONYMOUS_SESSION_USERNAME_KEY] = user.username
 
@@ -88,6 +90,8 @@ def retire_anonymous_identity(user):
         if not profile.retired_at:
             profile.retired_at = timezone.now()
             profile.save(update_fields=["retired_at"])
+        # Stop background delivery before changing this browser's identity.
+        user.push_subscriptions.filter(is_active=True).update(is_active=False)
     posts = 0
     participant = Q(poster=user) | Q(swiper=user)
     ids = list(Match.objects.filter(participant).filter(
@@ -111,6 +115,8 @@ def retire_anonymous_identity(user):
 
 
 def reset_anonymous_identity_for_request(request):
+    from plusone.services.browser_budget import consume_browser_limit
+    consume_browser_limit(request, "reset")
     retired = retire_anonymous_identity(request.user)
     logout(request)
     user = create_anonymous_user()

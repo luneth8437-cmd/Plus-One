@@ -56,6 +56,7 @@ ISO_DATE_RE = re.compile(r"\b(20\d{2})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12]\d|3[
 # "7/16" or "16.7." (day.month, common in Europe)
 SLASH_DATE_RE = re.compile(r"\b(0?[1-9]|1[0-2])/(0?[1-9]|[12]\d|3[01])\b")
 DOT_DATE_RE = re.compile(r"\b(0?[1-9]|[12]\d|3[01])\.(0?[1-9]|1[0-2])\.(?!\d)")
+CHINESE_DATE_RE = re.compile(r"(?:(20\d{2})年)?(0?[1-9]|1[0-2])月(0?[1-9]|[12]\d|3[01])(?:日|号|號)")
 WEEKDAY_RE = re.compile(rf"\b({'|'.join(WEEKDAYS)})\b", re.IGNORECASE)
 
 
@@ -86,10 +87,19 @@ def extract_explicit_date(text, now=None):
         day = int(match.group("day_a") or match.group("day_b"))
         month = MONTHS.get(month_name)
         if month:
-            candidate = _safe_date(today.year, month, day)
-            if candidate and candidate < today - timedelta(days=1):
+            year_match = re.match(r"\s*,?\s*(20\d{2})\b", text[match.end():])
+            year = int(year_match.group(1)) if year_match else today.year
+            candidate = _safe_date(year, month, day)
+            if not year_match and candidate and candidate < today - timedelta(days=1):
                 candidate = _safe_date(today.year + 1, month, day)
             return candidate
+
+    match = CHINESE_DATE_RE.search(text)
+    if match:
+        candidate = _safe_date(int(match.group(1) or today.year), int(match.group(2)), int(match.group(3)))
+        if not match.group(1) and candidate and candidate < today - timedelta(days=1):
+            candidate = _safe_date(today.year + 1, int(match.group(2)), int(match.group(3)))
+        return candidate
 
     match = DOT_DATE_RE.search(text)
     if match:
@@ -108,6 +118,12 @@ def extract_explicit_date(text, now=None):
     if "tomorrow" in lowered:
         return today + timedelta(days=1)
     if "today" in lowered or "tonight" in lowered:
+        return today
+    if "后天" in lowered or "後天" in lowered:
+        return today + timedelta(days=2)
+    if "明天" in lowered or "明晚" in lowered:
+        return today + timedelta(days=1)
+    if "今天" in lowered or "今晚" in lowered:
         return today
 
     match = WEEKDAY_RE.search(lowered)
@@ -190,7 +206,42 @@ def validate_draft(raw_text, parsed, now=None):
             }
         )
 
+    if not parsed.get("location_name"):
+        missing_fields.append("location")
+        warnings.append(
+            {
+                "code": "missing_location",
+                "message": "No unique campus location was identified in your text. Choose the actual meeting location below.",
+            }
+        )
+
+    end_time = _parse_iso_local(parsed.get("expected_end_time"))
+    end_warning = parsed.get("end_time_warning")
+    if end_time is None:
+        missing_fields.append("expected_end_time")
+    if end_warning == "suggested_end_time":
+        warnings.append(
+            {
+                "code": "suggested_end_time",
+                "message": "You did not specify an ending time. One hour after the start is suggested; check or change it before publishing.",
+            }
+        )
+    elif end_warning in {"ambiguous_end_time", "invalid_end_time"}:
+        warnings.append(
+            {
+                "code": end_warning,
+                "message": "Your ending time could not be resolved safely. Set an ending time after the start below before publishing.",
+            }
+        )
+
     expected_date = extract_explicit_date(raw_text, now=now)
+    if start_time and not expected_date and parsed.get("field_sources", {}).get("start_time") == "user_text":
+        warnings.append(
+            {
+                "code": "inferred_start_date",
+                "message": "You gave a clock time without a date. Check the suggested date before publishing.",
+            }
+        )
     date_mismatch = False
     if expected_date and start_time and start_time.date() != expected_date:
         date_mismatch = True

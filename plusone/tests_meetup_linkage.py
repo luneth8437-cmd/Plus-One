@@ -9,7 +9,6 @@ from django.urls import reverse
 
 from plusone.models import ActivityPost, ChatMessage, Match, MeetupAction, ProductEvent, UserProfile
 from plusone.selectors import dashboard_context_for_user
-from plusone.services.analytics import log_event
 from plusone.services.chat import confirm_meetup
 from plusone.services.cleanup import cleanup_stale_records, stale_anonymous_users
 from plusone.services.identity import retire_anonymous_identity
@@ -102,8 +101,8 @@ class MeetupHistoryLinkageTests(MeetupFixtures, TestCase):
 
     def legacy_confirmation(self):
         self.agree()
-        event = log_event(ProductEvent.Name.MEETUP_CONFIRMED, user=self.poster, match=self.match,
-                          properties={"historical": True})
+        event = ProductEvent.objects.create(name=ProductEvent.Name.MEETUP_CONFIRMED, user=self.poster, match=self.match,
+                                            properties={"historical": True})
         self.match.refresh_from_db()
         self.assertEqual(self.match.poster_meetup_outcome, "")
         return event

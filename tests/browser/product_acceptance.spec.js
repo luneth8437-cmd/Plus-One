@@ -107,10 +107,12 @@ test('waiting revisit, unsaved-edit choices, changed time and dashboard handoff 
     await expect(p.guest.locator('.chat-room-header [data-plan-time]')).toHaveText(current.meeting_at_display);
     await expect(p.guest.locator('[data-plan-action="outcome"]').first()).toBeDisabled();
     await p.guest.locator('[data-plan-action="arrived"]').click();
-    await expect(p.poster.locator('[data-other-meetup-status]')).toContainText('Marked arrived');
+    await expect(p.poster.locator('[data-other-meetup-status]')).toContainText('At the agreed meeting point');
     expect((await state(p.poster)).plan.other_outcome).toBe('');
     await p.poster.locator('[data-plan-action="delayed"][value="5"]').click();
-    await expect(p.guest.locator('[data-other-meetup-status]')).toContainText('5 min late');
+    const arrival = (await state(p.poster)).plan;
+    expect(new Date(arrival.viewer_arrival_eta).getTime()).toBeGreaterThan(Date.now());
+    await expect(p.guest.locator('[data-other-meetup-status]')).toContainText(arrival.viewer_arrival_eta_display);
     await p.poster.locator('[data-clear-delay]').click();
     await expect(p.guest.locator('[data-other-meetup-status]')).toContainText('Not marked arrived');
     expect((await state(p.guest)).plan.meeting_at_input).toBe(meeting);
@@ -128,7 +130,7 @@ test('actual meetup feedback survives response loss and remains independent for 
     await expect(p.guest.locator('[data-plan-point]').first()).toHaveText('Library front steps');
     await confirmBoth(p);
     await p.poster.locator('[data-plan-action="arrived"]').click();
-    await expect(p.guest.locator('[data-other-meetup-status]')).toContainText('Marked arrived');
+    await expect(p.guest.locator('[data-other-meetup-status]')).toContainText('At the agreed meeting point');
     expect((await state(p.guest)).plan.other_outcome).toBe('');
     let dropped = false;
     await p.poster.route('**/plan/', async route => {
@@ -147,7 +149,13 @@ test('actual meetup feedback survives response loss and remains independent for 
     await expect(p.poster.locator('[data-outcome-recorded]')).toContainText('You reported that you met');
     await expect(p.guest.locator('[data-other-meetup-status]')).toContainText('Reported: we met');
     expect((await state(p.guest)).plan.viewer_outcome).toBe('');
+    // A negative outcome cannot be finalized while the meetup window is
+    // still open. Cancelling the arrangement makes this feedback eligible.
     await p.guest.locator('.not-met-feedback > summary').click();
+    await expect(p.guest.locator('.not-met-feedback [data-plan-action="outcome"]')).toBeDisabled();
+    p.guest.once('dialog', dialog => dialog.accept());
+    await p.guest.locator('[data-plan-action="cancel_meetup"]').click();
+    await expect(p.guest.locator('.not-met-feedback [data-plan-action="outcome"]')).toBeEnabled();
     await p.guest.locator('#not-met-reason').selectOption('time_conflict');
     await p.guest.locator('.not-met-feedback [data-plan-action="outcome"]').click();
     await expect(p.guest.locator('[data-outcome-recorded]')).toContainText("didn't meet");
@@ -168,8 +176,9 @@ test('a counterpart identity reset cancels travel instructions and explains the 
     await startChat(p);
     await confirmBoth(p);
     await p.guest.goto('/session/');
-    p.guest.once('dialog', dialog => dialog.accept());
     await p.guest.getByRole('button', { name: 'Start fresh identity' }).click();
+    await expect(p.guest.getByRole('heading', { name: 'Start a new temporary identity?' })).toBeVisible();
+    await p.guest.getByRole('button', { name: 'Confirm identity reset' }).click();
     await expect(p.poster.locator('[data-meetup-guidance]')).toContainText('cancelled');
     await expect(p.poster.locator('[data-reopen-card]')).toBeVisible();
     await p.poster.goto(p.postUrl);
@@ -201,8 +210,8 @@ test('existing handoff has a clear no-script boundary and its arrival form works
     await expect(plain.locator('[data-chat-compose]')).toBeHidden();
     await expect(plain.locator('[data-plan-action="outcome"]').first()).toBeDisabled();
     await plain.locator('[data-plan-action="arrived"]').click();
-    await expect(plain.locator('[data-viewer-meetup-status]')).toHaveText('Marked arrived');
-    await expect(p.guest.locator('[data-other-meetup-status]')).toHaveText('Marked arrived');
+    await expect(plain.locator('[data-viewer-meetup-status]')).toContainText('At the agreed meeting point');
+    await expect(p.guest.locator('[data-other-meetup-status]')).toContainText('At the agreed meeting point');
     expect((await state(p.guest)).plan.other_outcome).toBe('');
     expect(p.pageErrors).toEqual([]);
   } finally { await closePair(p); }

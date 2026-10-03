@@ -2,48 +2,26 @@
 {% block title %}Session | Plus One{% endblock %}
 {% block content %}
 <section class="hero compact">
-  <div>
-    <p class="eyebrow">Anonymous session</p>
-    <h1>You're anonymous here.</h1>
-    <p class="lead">This temporary session keeps your posts, swipes, matches, and chats separate in this browser. It is not a public profile.</p>
-  </div>
-  <div class="avatar-preview" aria-label="Avatar preview">{{ profile.initial }}</div>
+  <div><p class="eyebrow">Temporary identity</p><h1>Your session in this browser.</h1><p class="lead">Your cards and plans belong to this temporary guest identity. No public profile is required.</p></div>
 </section>
-
-<section class="two-column profile-grid">
+<section class="information-grid">
   <article class="panel">
-    <p class="eyebrow">Private session {{ profile.initial }}</p>
-    <h2>What others can see</h2>
-    <ul class="plain-list">
-      <li>Your activity card details.</li>
-      <li>Your anonymous chat messages after a match.</li>
-      <li>Your agree-to-meet status inside that chat.</li>
-    </ul>
-    <h2>What stays hidden</h2>
-    <ul class="plain-list">
-      <li>Your session key.</li>
-      <li>Your browser identity.</li>
-      <li>The internal user record that keeps this session working.</li>
-    </ul>
-    <div class="chips">
-      <span>no sign-up</span>
-      <span>no password</span>
-      <span>browser session only</span>
-    </div>
-    <form method="post" class="identity-action-form">
-      {% csrf_token %}
-      <button class="primary-action" type="submit">Back to Discover</button>
-    </form>
+    <p class="eyebrow">Guest {{ profile.initial }}</p><h2>What your Plus One sees</h2>
+    <ul class="plain-list"><li>Your public activity details.</li><li>Your messages and shared meeting plan after matching.</li><li>Your confirmation, arrival, delay and meetup feedback in that match.</li></ul>
+    <h2>What stays private from other guests</h2><p>Your session key and internal account record. Your messages are still stored, and operators may review content to handle safety reports.</p>
+    <form method="post" class="identity-action-form">{% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}"><button class="primary-action" type="submit">{% if request.GET.next %}Return to previous page{% else %}Back to Discover{% endif %}</button></form>
   </article>
-
-  <article class="panel profile-card">
-    <p class="eyebrow">Session persistence</p>
-    <h2>This identity stays in this browser.</h2>
-    <p class="lead-small">It remains available until your cookies/session are cleared or you start fresh. It does not follow you to another device or browser.</p>
-    <form method="post" action="{% url 'reset_anonymous_identity' %}" class="identity-reset-form" data-confirm-reset="Starting fresh means this browser will lose access to your current posts, matches, and chats. Start fresh?">
-      {% csrf_token %}
+  <article class="panel">
+    <h2>Keep access to your plans</h2>
+    <p>This identity works in this browser only. It cannot be recovered on another device with a password or email.</p>
+    <p>Access can end when the session expires, cookies are cleared, you start fresh, or inactive temporary records are cleaned up. Keeping cookies does not guarantee permanent access.</p>
+    <p class="notice">Starting fresh cancels this identity's live cards, open matches and upcoming meetups. Your counterpart can see a cancelled meetup. Existing history is not a new cancellation after its meeting window has ended.</p>
+    <form method="post" action="{% url 'reset_anonymous_identity' %}" class="identity-reset-form">
+      {% csrf_token %}<input type="hidden" name="session_scope" value="{{ session_scope }}">
       <button class="secondary-action" type="submit">Start fresh identity</button>
     </form>
+    <p class="helptext">You will review the affected cards and plans before confirming. This also works without JavaScript.</p>
+    {% url 'privacy' as privacy_url %}{% if privacy_url %}<a class="details" href="{{ privacy_url }}">Privacy and data boundaries</a>{% endif %}
   </article>
 </section>
 {% endblock %}

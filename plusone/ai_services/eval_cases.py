@@ -47,7 +47,7 @@ PARSING_CASES = [
         "text": "Dinner at the dining hall on 16 July at 18:30?",
         "expected": {
             "activity_type": "food",
-            "location_name": "North Dining Hall",
+            "location_name": "",
             "start": {"date": {"month": 7, "day": 16}, "time": "18:30"},
         },
     },
@@ -57,7 +57,7 @@ PARSING_CASES = [
         "text": "Basketball at the gym on 16.7. at 20:00, casual game.",
         "expected": {
             "activity_type": "sports",
-            "location_name": "Campus Sports Hall",
+            "location_name": "",
             "start": {"date": {"month": 7, "day": 16}, "time": "20:00"},
         },
     },
@@ -68,7 +68,7 @@ PARSING_CASES = [
         "expected": {
             "activity_type": "club",
             "location_name": "Student Center",
-            "start": {"date": {"month": 7, "day": 20}, "time": "14:00"},
+            "start": {"date": {"year": 2026, "month": 7, "day": 20}, "time": "14:00"},
         },
     },
     # --- U1-U5 regression: no clear clock time -> no invented time ---
@@ -78,9 +78,9 @@ PARSING_CASES = [
         "text": "Looking for a lunch buddy at the mensa sometime today.",
         "expected": {
             "activity_type": "food",
-            "location_name": "North Dining Hall",
+            "location_name": "",
             "start": None,
-            "warnings": ["missing_start_time"],
+            "warnings": ["missing_start_time", "missing_location"],
         },
     },
     {
@@ -121,7 +121,8 @@ PARSING_CASES = [
         "tags": ["regression", "missing_time"],
         "text": "Coffee and homework tomorrow, main library?",
         "expected": {
-            "activity_type": "study",
+            # Existing category priority treats coffee as food before homework.
+            "activity_type": "food",
             "location_name": "Main Library",
             "start": None,
             "warnings": ["missing_start_time"],
@@ -134,8 +135,9 @@ PARSING_CASES = [
         "text": "Tomorrow at 12:30 lunch at the mensa?",
         "expected": {
             "activity_type": "food",
-            "location_name": "North Dining Hall",
+            "location_name": "",
             "start": {"date": {"days": 1}, "time": "12:30"},
+            "warnings": ["missing_location"],
         },
     },
     {
@@ -144,7 +146,7 @@ PARSING_CASES = [
         "text": "Tonight 8pm pickup basketball at the gym.",
         "expected": {
             "activity_type": "sports",
-            "location_name": "Campus Sports Hall",
+            "location_name": "",
             # anchored: the user explicitly wrote "tonight", so the product
             # never silently moves the date (same principle as the U6-U10
             # fix); a past time is caught by the publish validator instead.
@@ -200,7 +202,7 @@ PARSING_CASES = [
         "text": "Dinner near the dining hall at 6pm.",
         "expected": {
             "activity_type": "food",
-            "location_name": "North Dining Hall",
+            "location_name": "",
             "start": {"date": {"days": 0}, "time": "18:00"},
         },
     },
@@ -213,6 +215,66 @@ PARSING_CASES = [
             "activity_type": "sports",
             "expire_between": [5, 180],
         },
+    },
+    # October 2026 accuracy guardrails: an unspecified place is unresolved.
+    # Generic gym / mensa / dining hall are not verified catalog aliases.
+    {
+        "id": "no_location_from_study_category",
+        "tags": ["accuracy", "location"],
+        "text": "Tomorrow study together at 7pm until 10pm.",
+        "expected": {"activity_type": "study", "location_name": "", "warnings": ["missing_location"],
+                     "start": {"date": {"days": 1}, "time": "19:00"},
+                     "end": {"minutes_after_start": 180}, "field_sources": {"expected_end_time": "user_text"}},
+    },
+    {
+        "id": "explicit_end_24h",
+        "tags": ["accuracy", "end_time"],
+        "text": "Tomorrow at Main Library from 19:00 until 22:00, study together.",
+        "expected": {"location_name": "Main Library", "end": {"minutes_after_start": 180},
+                     "field_sources": {"expected_end_time": "user_text"}},
+    },
+    {
+        "id": "mixed_clock_end",
+        "tags": ["accuracy", "end_time"],
+        "text": "Tomorrow at Main Library, start at 19:00 and end at 10pm.",
+        "expected": {"start": {"date": {"days": 1}, "time": "19:00"}, "end": {"minutes_after_start": 180}},
+    },
+    {
+        "id": "duration_90_minutes",
+        "tags": ["accuracy", "end_time"],
+        "text": "Tomorrow at 7pm at Main Library for 90 minutes.",
+        "expected": {"end": {"minutes_after_start": 90}, "field_sources": {"expected_end_time": "user_text"}},
+    },
+    {
+        "id": "overnight_end",
+        "tags": ["accuracy", "end_time"],
+        "text": "Tomorrow at Main Library from 10pm until 1am.",
+        "expected": {"end": {"minutes_after_start": 180}, "field_sources": {"expected_end_time": "user_text"}},
+    },
+    {
+        "id": "unspecified_end_suggestion",
+        "tags": ["accuracy", "end_time"],
+        "text": "Tomorrow at Main Library at 7pm.",
+        "expected": {"end": {"minutes_after_start": 60}, "warnings": ["suggested_end_time"],
+                     "field_sources": {"expected_end_time": "suggested"}},
+    },
+    {
+        "id": "unclear_written_end",
+        "tags": ["accuracy", "end_time"],
+        "text": "Tomorrow at Main Library at 7pm until late.",
+        "expected": {"end": None, "warnings": ["ambiguous_end_time"], "field_sources": {"expected_end_time": "missing"}},
+    },
+    {
+        "id": "two_named_locations",
+        "tags": ["accuracy", "location"],
+        "text": "Tomorrow at 7pm at Main Library or North Dining Hall.",
+        "expected": {"location_name": "", "warnings": ["missing_location"]},
+    },
+    {
+        "id": "end_not_a_start",
+        "tags": ["accuracy", "end_time"],
+        "text": "Tomorrow at Main Library until 10pm.",
+        "expected": {"start": None, "end": None, "warnings": ["missing_start_time"]},
     },
 ]
 

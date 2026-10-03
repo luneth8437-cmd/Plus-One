@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.db.models import Q
 
 from plusone.ai import moderate_text
 from plusone.models import ActivityPost, Match, MeetupAction, ProductEvent
@@ -12,8 +13,32 @@ from plusone.services.lifecycle import expire_locked, identities_retired, locked
 from plusone.services.requests import RequestError, check_replay, consume_limit, fingerprint, request_uuid
 
 
-ACTIONS = {"update_plan", "confirm_plan", "arrived", "delayed", "cancel_meetup", "outcome", "reopen_card"}
+ACTIONS = {"update_plan", "confirm_plan", "arrived", "delayed", "coordination", "cancel_meetup", "outcome", "reopen_card"}
 OUTCOME_REASONS = {"no_show", "time_conflict", "cancelled", "other"}
+
+
+def _arrival_details(match, actor, now, historical=False, viewer=False):
+    eta = getattr(match, f"{actor}_arrival_eta")
+    updated = getattr(match, f"{actor}_arrival_updated_at")
+    signal = getattr(match, f"{actor}_coordination_signal")
+    status = getattr(match, f"{actor}_arrival_status")
+    eta_display = timezone.localtime(eta).strftime("%b %d, %H:%M") if eta else ""
+    updated_display = timezone.localtime(updated).strftime("%b %d, %H:%M") if updated else ""
+    expired = bool(eta and eta <= now)
+    if status == Match.ArrivalStatus.ARRIVED:
+        label = dict(Match.CoordinationSignal.choices).get(signal, "Marked arrived")
+    elif status == Match.ArrivalStatus.DELAYED:
+        expired_label = "Arrival estimate has passed. Update your estimate." if viewer else "Arrival estimate has passed. Awaiting a fresh update."
+        label = (expired_label if expired else f"Expected around {eta_display}") if eta else "Delay reported; arrival estimate not recorded."
+    else:
+        label = "Not marked arrived"
+    if historical and status != Match.ArrivalStatus.PENDING:
+        label = f"Last report: {dict(Match.CoordinationSignal.choices).get(signal, 'marked arrived')}" if status == Match.ArrivalStatus.ARRIVED else (
+            f"Last report: arrival estimate {eta_display}" if eta else "Last report: delay, without a recorded estimate."
+        )
+    return {"arrival_eta": eta.isoformat() if eta else None, "arrival_eta_display": eta_display,
+            "arrival_updated_at": updated.isoformat() if updated else None, "arrival_updated_at_display": updated_display,
+            "delay_expired": expired, "coordination_signal": signal, "arrival_label": label}
 
 
 def initialize_plan_locked(match, legacy=False):
@@ -58,6 +83,27 @@ def effective_outcome(match, user_id):
     return ""
 
 
+def conflicting_participants(match, now=None):
+    """Accepted half-open windows conflict regardless of participant role."""
+    now = now or timezone.now()
+    meeting_at, end_at = _effective_times(match)
+    if end_at <= now:
+        return set()
+    participants = match.participant_ids()
+    others = Match.objects.filter(
+        Q(poster_id__in=participants) | Q(swiper_id__in=participants),
+        status=Match.Status.AGREED, meetup_cancelled_at__isnull=True,
+    ).exclude(pk=match.pk).filter(
+        Q(plan_meeting_at__lt=end_at) | Q(plan_meeting_at__isnull=True, post__start_time__lt=end_at)
+    ).select_related("post")
+    conflicts = set()
+    for other in others:
+        other_start, other_end = _effective_times(other)
+        if other_end > now and meeting_at < other_end and other_start < end_at:
+            conflicts.update(participants.intersection(other.participant_ids()))
+    return conflicts
+
+
 def plan_payload(match, user):
     if not match.is_participant(user):
         raise RequestError("Only participants can view this plan.", 403)
@@ -71,12 +117,19 @@ def plan_payload(match, user):
     retired = identities_retired(match.participant_ids())
     can_chat = match.status == Match.Status.CHATTING and not retired and bool(match.chat_expires_at and match.chat_expires_at > now)
     near_meeting = meeting_at - timedelta(minutes=30) <= now <= end_at
-    can_outcome = agreed and meeting_at <= now <= end_at + timedelta(hours=24)
+    feedback_open = agreed and now <= end_at + timedelta(hours=24)
+    can_met = feedback_open and meeting_at <= now
+    can_not_met = feedback_open and (cancelled or end_at <= now)
     can_reopen = _can_reopen(match, user, now)
     my_outcome = effective_outcome(match, user.pk)
     their_outcome = effective_outcome(match, match.swiper_id if poster else match.poster_id)
+    feedback_actor = not identities_retired([user.pk]) and not my_outcome
+    conflicts = conflicting_participants(match, now) if match.status in Match.LIVE_STATUSES else set()
     window_finished = now >= end_at
     status = "cancelled" if cancelled else ("finished" if active and window_finished else "confirmed" if active else "draft")
+    arrival_allowed = active and near_meeting and not window_finished and not retired
+    mine_arrival = _arrival_details(match, mine, now, status in {"cancelled", "finished"}, viewer=True)
+    other_arrival = _arrival_details(match, other, now, status in {"cancelled", "finished"})
 
     def iso(value):
         return value.isoformat() if value else None
@@ -87,14 +140,19 @@ def plan_payload(match, user):
     expected_end = match.plan_expected_end_at or match.post.expected_end_time
     flags = {
         "can_edit": can_chat and not window_finished,
-        "can_confirm": can_chat and not window_finished and getattr(match, f"{mine}_agreed_revision") != match.plan_revision,
-        "can_arrive": active and near_meeting and not window_finished and not retired,
-        "can_delay": active and near_meeting and not window_finished and not retired,
+        "can_confirm": can_chat and not window_finished and not conflicts and getattr(match, f"{mine}_agreed_revision") != match.plan_revision,
+        "can_arrive": arrival_allowed,
+        "can_delay": arrival_allowed,
+        "can_delay_5": arrival_allowed and now + timedelta(minutes=5) < end_at,
+        "can_delay_10": arrival_allowed and now + timedelta(minutes=10) < end_at,
+        "can_coordinate": arrival_allowed,
         "can_cancel": active and not window_finished and not retired,
-        "can_outcome": can_outcome and not identities_retired([user.pk]) and not my_outcome,
+        "can_met": can_met and feedback_actor,
+        "can_not_met": can_not_met and feedback_actor,
+        "can_outcome": (can_met or can_not_met) and feedback_actor,
         "can_reopen_card": can_reopen,
     }
-    action_flags = {"update_plan": "can_edit", "confirm_plan": "can_confirm", "arrived": "can_arrive", "delayed": "can_delay", "cancel_meetup": "can_cancel", "outcome": "can_outcome", "reopen_card": "can_reopen_card"}
+    action_flags = {"update_plan": "can_edit", "confirm_plan": "can_confirm", "arrived": "can_arrive", "delayed": "can_delay", "coordination": "can_coordinate", "cancel_meetup": "can_cancel", "outcome": "can_outcome", "reopen_card": "can_reopen_card"}
     return {
         "revision": match.plan_revision,
         "meeting_point": match.meeting_point or match.post.location.name,
@@ -107,12 +165,20 @@ def plan_payload(match, user):
         "legacy": match.plan_legacy, "meetup_status": status, "window_finished": window_finished,
         "viewer_status": getattr(match, f"{mine}_arrival_status"), "other_status": getattr(match, f"{other}_arrival_status"),
         "viewer_delay_minutes": getattr(match, f"{mine}_delay_minutes"), "other_delay_minutes": getattr(match, f"{other}_delay_minutes"),
+        **{f"viewer_{key}": value for key, value in mine_arrival.items()},
+        **{f"other_{key}": value for key, value in other_arrival.items()},
         "viewer_outcome": my_outcome, "other_outcome": their_outcome,
         "viewer_outcome_reason": getattr(match, f"{mine}_outcome_reason"), "other_outcome_reason": getattr(match, f"{other}_outcome_reason"),
         "is_publisher": poster,
+        "schedule_conflict": bool(conflicts),
+        "viewer_schedule_conflict": user.pk in conflicts,
+        "other_schedule_conflict": (match.swiper_id if poster else match.poster_id) in conflicts,
         "earliest_meeting_at_input": local(match.post.start_time - timedelta(minutes=15)),
         "latest_end_at_input": local(match.post.expected_end_time or match.post.start_time + timedelta(hours=1)),
-        "action_ready": "cancelled" if cancelled else "chatting" if can_chat else "near_meeting" if active and near_meeting else "after_meeting" if can_outcome else "waiting" if match.status == Match.Status.WAITING else "not_available_yet",
+        "feedback_deadline": iso(end_at + timedelta(hours=24)),
+        "feedback_deadline_display": local(end_at + timedelta(hours=24), True),
+        "feedback_deadline_input": local(end_at + timedelta(hours=24)),
+        "action_ready": "cancelled" if cancelled else "chatting" if can_chat else "near_meeting" if active and near_meeting else "after_meeting" if (can_met or can_not_met) else "waiting" if match.status == Match.Status.WAITING else "not_available_yet",
         **flags, "allowed_actions": [action for action, flag in action_flags.items() if flags[flag]],
     }
 
@@ -138,7 +204,16 @@ def _revision(value):
     return result
 
 
-def _check_current(match, user, action, revision):
+def _delay_eta(match, minutes, now):
+    if not minutes:
+        return None
+    eta = now + timedelta(minutes=minutes)
+    if eta >= _effective_times(match)[1]:
+        raise RequestError("That estimate is too late for the agreed meeting window. Cancel the meetup if you cannot arrive before its end.", 409)
+    return eta
+
+
+def _check_current(match, user, action, revision, *, outcome=None):
     if not match.is_participant(user):
         raise RequestError("Only participants can update this plan.", 403)
     if action == "reopen_card" and user.pk != match.poster_id:
@@ -149,7 +224,14 @@ def _check_current(match, user, action, revision):
         raise RequestError("The plan changed. Review the latest point and time before confirming.", 409)
     if action == "confirm_plan" and match.status == Match.Status.CHATTING and _effective_times(match)[1] <= timezone.now():
         raise RequestError("This activity has ended. Its meeting plan can no longer be confirmed.", 409)
-    allowed = plan_payload(match, user)["allowed_actions"]
+    plan = plan_payload(match, user)
+    allowed = plan["allowed_actions"]
+    if action == "confirm_plan" and match.status == Match.Status.CHATTING and plan["schedule_conflict"]:
+        raise RequestError("This time overlaps another confirmed meetup. Choose a different time within this activity's window.", 409)
+    if action == "outcome" and not plan["can_met" if outcome == "met" else "can_not_met"]:
+        if plan["viewer_outcome"]:
+            raise RequestError("Your meetup feedback is already recorded.", 409)
+        raise RequestError("You can report not met after the meeting window ends or the meetup is cancelled." if outcome == "not_met" else "Meeting feedback is not available at this time.", 409)
     # A fresh UUID confirming one's already-accepted current plan is harmless.
     already_confirmed = action == "confirm_plan" and match.status in {Match.Status.CHATTING, Match.Status.AGREED} and not match.meetup_cancelled_at and getattr(match, "poster_agreed_revision" if user.pk == match.poster_id else "swiper_agreed_revision") == revision
     if action not in allowed and not already_confirmed:
@@ -222,7 +304,8 @@ def _reply(match, user, result, replayed):
 
 
 def perform_meetup_action(match_id, user, action, request_id, revision, *, meeting_point=None,
-                         meeting_at=None, expected_end_at=None, delay_minutes=None, outcome=None, outcome_reason=None):
+                         meeting_at=None, expected_end_at=None, delay_minutes=None, coordination_signal=None, outcome=None, outcome_reason=None,
+                         before_moderation=None):
     if action not in ACTIONS:
         raise RequestError("Choose a valid meetup action.")
     key, revision = request_uuid(request_id), _revision(revision)
@@ -237,6 +320,10 @@ def perform_meetup_action(match_id, user, action, request_id, revision, *, meeti
         if delay_minutes not in {0, 5, 10}:
             raise RequestError("Choose five or ten minutes, or clear the delay.")
         data = {"delay_minutes": delay_minutes}
+    elif action == "coordination":
+        if coordination_signal not in {*Match.CoordinationSignal.values, "clear"}:
+            raise RequestError("Choose one of the available arrival signals.")
+        data = {"coordination_signal": coordination_signal}
     elif action == "outcome":
         if outcome not in {"met", "not_met"}:
             raise RequestError("Choose whether you met.")
@@ -252,14 +339,17 @@ def perform_meetup_action(match_id, user, action, request_id, revision, *, meeti
             raise RequestError("Only participants can update this plan.", 403)
         existing = check_replay(MeetupAction.objects.filter(match=current, actor=user, request_id=key).first(), digest)
         if existing:
+            expire_locked(current)
             return _reply(current, user, existing.result, True)
         expire_locked(current)
         initialize_plan_locked(current)
         denial = None
         try:
-            _check_current(current, user, action, revision)
+            _check_current(current, user, action, revision, outcome=data.get("outcome"))
             if action == "update_plan":
                 _validate_plan(current, data)
+            elif action == "delayed":
+                _delay_eta(current, data["delay_minutes"], timezone.now())
         except RequestError as error:
             denial = error
     if denial:
@@ -267,7 +357,11 @@ def perform_meetup_action(match_id, user, action, request_id, revision, *, meeti
 
     # Never wait for moderation while holding the pair/card locks.
     if action == "update_plan":
-        consume_limit(user, "ai", request_id=key, digest=digest)
+        if before_moderation is not None:
+            before_moderation()
+        # A refused/failed provider attempt can be retried with the same UUID,
+        # but it still uses quota. Accepted actions replay before this point.
+        consume_limit(user, "ai")
         moderation = moderate_text(user, data["meeting_point"])
         if moderation.get("service_unavailable"):
             raise RequestError("The safety check is temporarily unavailable. Your plan was not changed.", 503)
@@ -277,11 +371,15 @@ def perform_meetup_action(match_id, user, action, request_id, revision, *, meeti
     with locked_match(match_id) as current:
         existing = check_replay(MeetupAction.objects.filter(match=current, actor=user, request_id=key).first(), digest)
         if existing:
+            expire_locked(current)
             return _reply(current, user, existing.result, True)
         expire_locked(current)
         denial = None
         try:
-            _check_current(current, user, action, revision)
+            _check_current(current, user, action, revision, outcome=data.get("outcome"))
+            arrival_now = timezone.now()
+            if action == "delayed":
+                arrival_eta = _delay_eta(current, data["delay_minutes"], arrival_now)
         except RequestError as error:
             denial = error
         if denial is None:
@@ -302,11 +400,21 @@ def perform_meetup_action(match_id, user, action, request_id, revision, *, meeti
                     log_event(ProductEvent.Name.PLAN_UPDATED, user=user, match=current, properties={"plan_revision": current.plan_revision})
             elif action == "confirm_plan":
                 confirm_plan_locked(current, user, revision)
-            elif action in {"arrived", "delayed"}:
-                setattr(current, f"{mine}_arrival_status", Match.ArrivalStatus.ARRIVED if action == "arrived" else Match.ArrivalStatus.DELAYED if data["delay_minutes"] else Match.ArrivalStatus.PENDING)
+            elif action in {"arrived", "delayed", "coordination"}:
+                cleared = action == "delayed" and not data["delay_minutes"] or action == "coordination" and data["coordination_signal"] == "clear"
+                status = Match.ArrivalStatus.PENDING if cleared else Match.ArrivalStatus.DELAYED if action == "delayed" else Match.ArrivalStatus.ARRIVED
+                signal = Match.CoordinationSignal.AT_POINT if action == "arrived" else data.get("coordination_signal", "")
+                setattr(current, f"{mine}_arrival_status", status)
                 setattr(current, f"{mine}_delay_minutes", data.get("delay_minutes", 0))
-                current.save(update_fields=[f"{mine}_arrival_status", f"{mine}_delay_minutes"])
-                log_event(ProductEvent.Name.MEETUP_STATUS_UPDATED, user=user, match=current, properties={"status": getattr(current, f"{mine}_arrival_status"), "delay_minutes": getattr(current, f"{mine}_delay_minutes")})
+                setattr(current, f"{mine}_arrival_eta", arrival_eta if action == "delayed" else None)
+                setattr(current, f"{mine}_arrival_updated_at", None if cleared else arrival_now)
+                setattr(current, f"{mine}_coordination_signal", "" if cleared else signal)
+                current.save(update_fields=[f"{mine}_{field}" for field in ("arrival_status", "delay_minutes", "arrival_eta", "arrival_updated_at", "coordination_signal")])
+                log_event(ProductEvent.Name.MEETUP_STATUS_UPDATED, user=user, match=current, properties={
+                    "status": status, "delay_minutes": getattr(current, f"{mine}_delay_minutes"),
+                    "coordination_signal": getattr(current, f"{mine}_coordination_signal"),
+                    "arrival_eta": getattr(current, f"{mine}_arrival_eta").isoformat() if getattr(current, f"{mine}_arrival_eta") else None,
+                })
             elif action == "cancel_meetup":
                 cancel_meetup_locked(current, user)
             elif action == "outcome":

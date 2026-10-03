@@ -46,15 +46,19 @@ class ActivityPostForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        require_end = kwargs.pop("require_end", False)
         super().__init__(*args, **kwargs)
         self.fields["activity_type"].choices = [("", "Activity"), *ActivityPost.ActivityType.choices]
         self.fields["location"].queryset = CampusLocation.objects.order_by("area", "name")
         self.fields["location"].empty_label = "Campus location"
         self.fields["title"].widget.attrs.setdefault("placeholder", "Basketball game tonight")
         self.fields["description"].widget.attrs.setdefault("placeholder", "Looking for someone to join for a quick vibe check first.")
-        self.fields["expected_end_time"].required = False
+        self.fields["expected_end_time"].required = require_end
         self.fields["expected_end_time"].label = "Expected end time"
-        self.fields["expected_end_time"].help_text = "Optional. If blank, Plus One uses one hour after the start time."
+        self.fields["expected_end_time"].help_text = (
+            "Choose the expected end. AI suggestions still need your review." if require_end
+            else "Optional. If blank, Plus One uses one hour after the start time."
+        )
 
     def clean_start_time(self):
         start_time = self.cleaned_data["start_time"]

@@ -67,6 +67,7 @@ jobs:
         run: |
           npm ci
           node --check plusone/static/plusone/app.js
+          node --check plusone/static/plusone/service-worker.js
           npm run test:js
 
       - name: Django test suite

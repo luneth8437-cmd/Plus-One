@@ -78,7 +78,7 @@ class PlusOneTestCase(TestCase):
         post = ActivityPost.objects.get(title="Study sprint", user=self.poster)
         self.assertEqual(post.expected_end_time, expected_end_time)
 
-    def test_create_activity_post_defaults_end_to_one_hour_after_start(self):
+    def test_create_activity_post_requires_reviewed_expected_end_time(self):
         self.client.force_login(self.poster)
         start_time = (timezone.localtime() + timedelta(hours=2)).replace(second=0, microsecond=0)
 
@@ -88,7 +88,7 @@ class PlusOneTestCase(TestCase):
                 "action": "publish",
                 "request_id": str(uuid4()),
                 "title": "One-hour study sprint",
-                "description": "Use the default expected duration.",
+                "description": "An end time must be reviewed before publishing.",
                 "activity_type": ActivityPost.ActivityType.STUDY,
                 "location": self.location.id,
                 "start_time": start_time.strftime("%Y-%m-%dT%H:%M"),
@@ -97,9 +97,11 @@ class PlusOneTestCase(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 302)
-        post = ActivityPost.objects.get(title="One-hour study sprint")
-        self.assertEqual(post.expected_end_time, start_time + timedelta(hours=1))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("expected_end_time", response.context["post_form"].errors)
+        self.assertEqual(response.context["post_form"]["start_time"].value(), start_time.strftime("%Y-%m-%dT%H:%M"))
+        self.assertEqual(response.context["post_form"]["expected_end_time"].value(), "")
+        self.assertFalse(ActivityPost.objects.filter(title="One-hour study sprint").exists())
 
     def test_create_activity_post_rejects_end_before_start(self):
         self.client.force_login(self.poster)
@@ -136,6 +138,7 @@ class PlusOneTestCase(TestCase):
                 "activity_type": ActivityPost.ActivityType.STUDY,
                 "location": "not-a-location-id",
                 "start_time": (timezone.localtime() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M"),
+                "expected_end_time": (timezone.localtime() + timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M"),
                 "expire_minutes": "30",
             },
         )
@@ -160,6 +163,7 @@ class PlusOneTestCase(TestCase):
                 "activity_type": ActivityPost.ActivityType.STUDY,
                 "location": "",
                 "start_time": start_value,
+                "expected_end_time": (start_time + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"),
                 "expire_minutes": "30",
             },
         )
@@ -194,6 +198,7 @@ class PlusOneTestCase(TestCase):
                 "activity_type": ActivityPost.ActivityType.SPORTS,
                 "location": self.location.id,
                 "start_time": (timezone.localtime() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M"),
+                "expected_end_time": (timezone.localtime() + timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M"),
                 "expire_minutes": "30",
             },
         )
@@ -210,6 +215,7 @@ class PlusOneTestCase(TestCase):
                 "action": "assist",
                 "raw_text": "Bring a weapon to the game",
             },
+            follow=True,
         )
 
         self.assertEqual(response.status_code, 200)
@@ -219,25 +225,50 @@ class PlusOneTestCase(TestCase):
 
     def test_assist_output_does_not_show_internal_llm_log_payload(self):
         self.client.force_login(self.poster)
+        reviewed = {
+            "title": "My reviewed study plan", "description": "Keep my reviewed details.",
+            "activity_type": ActivityPost.ActivityType.STUDY, "location": str(self.location.pk),
+            "start_time": (timezone.localtime() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M"),
+            "expected_end_time": (timezone.localtime() + timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M"),
+            "expire_minutes": "30",
+        }
         response = self.client.post(
             reverse("create_post"),
             {
                 "action": "assist",
-                "raw_text": "Tonight I wanna play basketball",
+                "assist_text": "Tonight I wanna play basketball",
+                "reviewed_payload": json.dumps(reviewed),
             },
+            follow=True,
         )
 
         self.assertEqual(response.status_code, 200)
         # "Tonight" has no explicit clock time, so the guardrail flags the draft
         # for review instead of showing the plain success message.
         self.assertContains(response, "Draft ready, but it needs your attention before publishing.")
-        self.assertContains(response, "Review and publish")
-        self.assertContains(response, "Tell Plus One your plan")
+        self.assertContains(response, "Activity details")
+        self.assertContains(response, "Tell Plus One what you want to do")
         self.assertContains(response, "Draft my card")
+        self.assertContains(response, "Apply suggested draft")
+        self.assertContains(response, "Keep my reviewed fields")
+        self.assertContains(response, "data-draft-proposal")
+        for name, value in reviewed.items():
+            self.assertEqual(response.context["post_form"][name].value(), value)
+        proposal = response.context["draft_proposal"]
+        self.assertNotEqual(proposal["fields"]["title"], reviewed["title"])
+        self.assertEqual(ActivityPost.objects.count(), 1)
         self.assertNotContains(response, "LLM-assisted post creation")
         self.assertNotContains(response, "Ask AI to structure it")
         self.assertNotContains(response, "AI / fallback output saved to LLMLog")
         self.assertNotContains(response, "location_name")
+        applied = self.client.post(reverse("create_post"), {
+            "action": "apply_draft", "reviewed_payload": json.dumps(reviewed),
+            "proposal_payload": json.dumps(proposal),
+        }, follow=True)
+        self.assertEqual(applied.status_code, 200)
+        self.assertContains(applied, "Draft suggestions applied. Review all details before publishing.")
+        self.assertEqual(applied.context["post_form"]["title"].value(), proposal["fields"]["title"])
+        self.assertEqual(ActivityPost.objects.count(), 1)
 
     def test_assist_shows_time_confirmation_for_ambiguous_hour(self):
         self.client.force_login(self.poster)
@@ -247,13 +278,16 @@ class PlusOneTestCase(TestCase):
                 "action": "assist",
                 "raw_text": "Tomorrow I wanna play basketball at sports center at 7",
             },
+            follow=True,
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Time needs confirmation")
+        self.assertContains(response, "Choose AM or PM")
         self.assertContains(response, "Morning")
         self.assertContains(response, "Evening")
         self.assertContains(response, "data-time-option")
+        self.assertEqual(response.context["post_form"]["start_time"].value(), None)
+        self.assertEqual(response.context["draft_proposal"]["fields"]["start_time"], "")
 
     def test_discover_presents_decision_queue_actions(self):
         self.client.force_login(self.swiper)
@@ -261,10 +295,11 @@ class PlusOneTestCase(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Decision queue")
-        self.assertContains(response, "Pick one plan. Decide fast.")
+        self.assertContains(response, "Find your next Plus One.")
+        self.assertContains(response, "Interested opens a waiting room")
         self.assertContains(response, 'aria-label="Pass"')
         self.assertContains(response, 'aria-label="Interested"')
-        self.assertContains(response, "expires in")
+        self.assertContains(response, "Recruiting closes in")
 
     def test_discover_empty_state_gives_next_actions(self):
         self.post.status = ActivityPost.Status.CANCELLED
@@ -274,7 +309,7 @@ class PlusOneTestCase(TestCase):
         response = self.client.get(reverse("discover"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "No cards are ready for this queue.")
+        self.assertContains(response, "No activities here right now.")
         self.assertContains(response, "Start a Plus One")
         self.assertContains(response, "See latest cards")
 
@@ -354,7 +389,8 @@ class PlusOneTestCase(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.request["PATH_INFO"], reverse("create_post"))
-        self.assertContains(response, "Create a temporary Plus One card.")
+        self.assertContains(response, "Create a Plus One.")
+        self.assertContains(response, "Fill in the details below. AI drafting is optional.")
         self.assertTrue(get_user_model().objects.filter(username__startswith="anon_").exists())
 
     def test_anonymous_session_reuses_same_identity(self):
@@ -380,7 +416,17 @@ class PlusOneTestCase(TestCase):
 
         self.client.get(reverse("home"))
         first_user_id = self.client.session["_auth_user_id"]
-        response = self.client.post(reverse("reset_anonymous_identity"))
+        preview = self.client.get(reverse("reset_anonymous_identity"))
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(self.client.session["_auth_user_id"], first_user_id)
+        self.assertEqual(User.objects.filter(username__startswith="anon_").count(), 1)
+        preview = self.client.post(reverse("reset_anonymous_identity"))
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(self.client.session["_auth_user_id"], first_user_id)
+        self.assertEqual(User.objects.filter(username__startswith="anon_").count(), 1)
+        response = self.client.post(reverse("reset_anonymous_identity"), {
+            "confirm_reset": "yes", "session_scope": preview.context["session_scope"],
+        })
         second_user_id = self.client.session["_auth_user_id"]
 
         self.assertEqual(response.status_code, 302)
@@ -408,7 +454,20 @@ class PlusOneTestCase(TestCase):
             chat_expires_at=timezone.now() + timedelta(minutes=5),
         )
 
-        response = self.client.post(reverse("reset_anonymous_identity"))
+        for method in (self.client.get, self.client.post):
+            preview = method(reverse("reset_anonymous_identity"))
+            old_post.refresh_from_db()
+            match.refresh_from_db()
+            self.assertEqual(preview.status_code, 200)
+            self.assertEqual(self.client.session["_auth_user_id"], str(old_user.pk))
+            self.assertEqual(old_post.status, ActivityPost.Status.ACTIVE)
+            self.assertEqual(match.status, Match.Status.CHATTING)
+            self.assertIsNone(UserProfile.objects.get(user=old_user).retired_at)
+            self.assertEqual([post.pk for post in preview.context["reset_posts"]], [old_post.pk])
+            self.assertEqual([item.pk for item in preview.context["reset_matches"]], [match.pk])
+        response = self.client.post(reverse("reset_anonymous_identity"), {
+            "confirm_reset": "yes", "session_scope": preview.context["session_scope"],
+        })
 
         old_post.refresh_from_db()
         match.refresh_from_db()
@@ -441,10 +500,12 @@ class PlusOneTestCase(TestCase):
         response = self.client.get(reverse("session"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "You're anonymous here.")
-        self.assertContains(response, "What others can see")
-        self.assertContains(response, "What stays hidden")
-        self.assertContains(response, "data-confirm-reset")
+        self.assertContains(response, "Your session in this browser.")
+        self.assertContains(response, "What your Plus One sees")
+        self.assertContains(response, "What stays private from other guests")
+        self.assertContains(response, reverse("reset_anonymous_identity"))
+        self.assertContains(response, "review the affected cards and plans before confirming")
+        self.assertContains(response, 'name="session_scope"')
         self.assertNotContains(response, "Temporary name")
         self.assertTrue(get_user_model().objects.filter(username__startswith="anon_").exists())
 
@@ -465,6 +526,7 @@ class PlusOneTestCase(TestCase):
                 "activity_type": ActivityPost.ActivityType.FOOD,
                 "location": self.location.id,
                 "start_time": (timezone.localtime() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M"),
+                "expected_end_time": (timezone.localtime() + timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M"),
                 "expire_minutes": "30",
             },
         )
@@ -677,7 +739,9 @@ class PlusOneTestCase(TestCase):
         self.client.force_login(self.swiper)
         response = self.client.get(f"{reverse('discover')}?matched={match.id}")
 
-        self.assertContains(response, "It's a vibe.")
+        self.assertContains(response, '<dialog class="match-modal"')
+        self.assertContains(response, 'data-match-dialog open aria-labelledby="match-dialog-title"')
+        self.assertContains(response, "Meet your Plus One in chat.")
         self.assertContains(response, reverse("chat", args=[match.id]))
 
     def test_chat_accessible_only_to_participants(self):
@@ -1275,7 +1339,7 @@ class PlusOneTestCase(TestCase):
         self.client.force_login(self.poster)
         response = self.client.get(reverse("discover"))
 
-        self.assertContains(response, '<span class="nav-badge">1</span>')
+        self.assertContains(response, '<span class="nav-badge" aria-label="1 open matches">1</span>')
 
     def test_about_page_describes_product_flow_and_privacy(self):
         response = self.client.get(reverse("about"))

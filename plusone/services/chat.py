@@ -49,12 +49,14 @@ def close_match(match_id, user, reason):
         return CloseMatchResult(closed, match.id)
 
 
-def report_match(match_id, user, category="other", reason=""):
+def report_match(match_id, user, category="other", reason="", *, block=True):
     if category not in SafetyReport.Category.values or len(reason) > 500:
         raise RequestError("Choose a report category and use at most 500 characters.")
     with locked_match(match_id) as match:
         if not match.is_participant(user):
             raise RequestError("Only participants can report this match.", 403)
+        if identities_retired([user.pk]):
+            raise RequestError("This identity has been reset. Refresh before using safety controls.", 409)
         report, created = SafetyReport.objects.get_or_create(match=match, reporter=user, defaults={"category": category, "reason": reason})
         if not created:
             from datetime import timedelta
@@ -68,11 +70,20 @@ def report_match(match_id, user, category="other", reason=""):
             report.save(update_fields=["category", "reason", "status", "updated_at"])
         expire_locked(match)
         if match.status == Match.Status.AGREED:
-            from plusone.services.meetups import cancel_meetup_locked
-            cancel_meetup_locked(match, user, reason="reported")
+            from plusone.services.meetups import _effective_times, cancel_meetup_locked
+            from django.utils import timezone
+            if _effective_times(match)[1] > timezone.now():
+                cancel_meetup_locked(match, user, reason="reported")
         else:
             end_locked(match, status=Match.Status.DECLINED, reason=Match.CloseReason.REPORTED, user=user)
-        return report
+        if block:
+            from plusone.services.safety import create_block_locked
+            target_id = match.swiper_id if user.pk == match.poster_id else match.poster_id
+            create_block_locked(user, target_id)
+    if block:
+        from plusone.services.safety import close_blocked_relationships
+        close_blocked_relationships(user.pk, target_id)
+    return report
 
 
 def message_replay(match, user, request_id, digest):
@@ -95,7 +106,7 @@ def create_chat_message(match, user, text, request_id=None):
             end_locked(current, reason=Match.CloseReason.RESET)
         if current.status != Match.Status.CHATTING:
             return None, {"flagged": False, "unavailable": True}
-    consume_limit(user, "message", request_id=request_id, digest=digest)
+    consume_limit(user, "message")
     moderation = moderate_text(user, text)
     if moderation.get("flagged") or moderation.get("service_unavailable"):
         return None, moderation

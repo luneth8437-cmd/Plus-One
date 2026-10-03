@@ -9,9 +9,14 @@ from django.utils import timezone
 
 from plusone.models import (
     ActivityPost,
+    ActivityReport,
+    BrowserBudgetBucket,
     ChatMessage,
     LLMLog,
     Match,
+    PresenceLease,
+    PushDelivery,
+    PushSubscription,
     ProductEvent,
     RateLimitBucket,
     SafetyReport,
@@ -113,6 +118,12 @@ def _with_protection_annotations(queryset, now, report_cutoff):
                 created_at__gte=report_cutoff,
             )
         ),
+        cleanup_has_unresolved_activity_report=Exists(
+            ActivityReport.objects.filter(
+                Q(post__user_id=OuterRef("pk")) | Q(reporter_id=OuterRef("pk")),
+                status__in=unresolved_statuses, created_at__gte=report_cutoff,
+            )
+        ),
     )
 
 
@@ -136,6 +147,7 @@ def stale_anonymous_users(days=7, *, report_days=MAX_REPORT_RETENTION_DAYS, now=
         cleanup_has_live_match=False,
         cleanup_has_current_agreement=False,
         cleanup_has_unresolved_report=False,
+        cleanup_has_unresolved_activity_report=False,
     )
 
 
@@ -174,6 +186,10 @@ def _is_protected_locked(user_id, now, report_cutoff):
     return SafetyReport.objects.filter(
         Q(match__poster_id=user_id) | Q(match__swiper_id=user_id),
         status__in=[SafetyReport.Status.PENDING, SafetyReport.Status.IN_PROGRESS],
+        created_at__gte=report_cutoff,
+    ).exists() or ActivityReport.objects.filter(
+        Q(post__user_id=user_id) | Q(reporter_id=user_id),
+        status__in=[ActivityReport.Status.PENDING, ActivityReport.Status.IN_PROGRESS],
         created_at__gte=report_cutoff,
     ).exists()
 
@@ -235,6 +251,44 @@ def _bounded_ids(queryset, batch_size):
 def _delete_ids(model, ids):
     if ids:
         model.objects.filter(pk__in=ids).delete()
+
+
+def _inactive_push_subscriptions(now):
+    return PushSubscription.objects.filter(is_active=False).filter(
+        Q(user__userprofile__retired_at__isnull=False)
+        | Q(updated_at__lt=now - timedelta(days=30))
+    )
+
+
+def _cleanup_push_subscriptions(now, batch_size, dry_run):
+    ids = _bounded_ids(_inactive_push_subscriptions(now), batch_size)
+    if dry_run:
+        return len(ids)
+    with transaction.atomic():
+        # Recheck after locking: a current user may have re-enabled reminders.
+        eligible = list(_inactive_push_subscriptions(now).filter(pk__in=ids)
+                        .select_for_update(of=("self",)).values_list("pk", flat=True))
+        _delete_ids(PushSubscription, eligible)
+    return len(eligible)
+
+
+def _cleanup_push_deliveries(now, batch_size, dry_run):
+    from plusone.services.push_notifications import _eligible_rows
+    candidates = list(PushDelivery.objects.filter(created_at__lt=now - timedelta(days=90))
+                      .select_related("subscription", "subscription__user").order_by("pk")[:batch_size])
+    active_keys = {}
+    ids = []
+    for row in candidates:
+        user = row.subscription.user
+        if user.pk not in active_keys:
+            active_keys[user.pk] = {notice["notification_id"] for notice in _eligible_rows(user, now)}
+        # A far-future accepted plan can still use this deduplication key.
+        # Keep its tombstone until that notification is no longer current.
+        if row.notification_key not in active_keys[user.pk]:
+            ids.append(row.pk)
+    if not dry_run:
+        _delete_ids(PushDelivery, ids)
+    return len(ids)
 
 
 def _report_message_candidates(now, report_cutoff, batch_size):
@@ -326,10 +380,19 @@ def cleanup_stale_records(
         SafetyReport.objects.filter(created_at__lt=now - timedelta(days=report_days)),
         batch_size,
     )
+    activity_report_ids = _bounded_ids(
+        ActivityReport.objects.filter(created_at__lt=now - timedelta(days=report_days)), batch_size,
+    )
     session_ids = _bounded_ids(Session.objects.filter(expire_date__lte=now), batch_size)
     rate_limit_bucket_ids = _bounded_ids(
         RateLimitBucket.objects.filter(expires_at__lte=now),
         batch_size,
+    )
+    browser_budget_bucket_ids = _bounded_ids(
+        BrowserBudgetBucket.objects.filter(expires_at__lte=now), batch_size,
+    )
+    presence_lease_ids = _bounded_ids(
+        PresenceLease.objects.filter(expires_at__lte=now).exclude(match__status__in=Match.LIVE_STATUSES), batch_size,
     )
 
     counts = {
@@ -337,9 +400,14 @@ def cleanup_stale_records(
         "llm_logs": len(llm_log_ids),
         "events": len(event_ids),
         "safety_reports": len(report_ids),
+        "activity_reports": len(activity_report_ids),
         "report_messages": 0,
         "sessions": len(session_ids),
         "rate_limit_buckets": len(rate_limit_bucket_ids),
+        "browser_budget_buckets": len(browser_budget_bucket_ids),
+        "presence_leases": len(presence_lease_ids),
+        "push_subscriptions": 0,
+        "push_deliveries": 0,
     }
     if not dry_run:
         # Remove content-bearing records before identities. Their user foreign
@@ -347,8 +415,11 @@ def cleanup_stale_records(
         _delete_ids(LLMLog, llm_log_ids)
         _delete_ids(ProductEvent, event_ids)
         _delete_ids(SafetyReport, report_ids)
+        _delete_ids(ActivityReport, activity_report_ids)
         _delete_ids(Session, session_ids)
         _delete_ids(RateLimitBucket, rate_limit_bucket_ids)
+        _delete_ids(BrowserBudgetBucket, browser_budget_bucket_ids)
+        _delete_ids(PresenceLease, presence_lease_ids)
 
     counts["report_messages"] = _cleanup_report_messages(
         now=now,
@@ -356,6 +427,8 @@ def cleanup_stale_records(
         batch_size=batch_size,
         dry_run=dry_run,
     )
+    counts["push_deliveries"] = _cleanup_push_deliveries(now, batch_size, dry_run)
+    counts["push_subscriptions"] = _cleanup_push_subscriptions(now, batch_size, dry_run)
     counts["users"] = _cleanup_users(
         days=user_days,
         report_days=report_days,

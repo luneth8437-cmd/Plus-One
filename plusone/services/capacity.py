@@ -17,7 +17,7 @@ def effective_capacity(post=None):
 def sync_locked_post(post):
     if post.status == ActivityPost.Status.CANCELLED:
         return post.status
-    if post.expire_time <= timezone.now():
+    if post.matching_deadline <= timezone.now():
         if post.status != ActivityPost.Status.EXPIRED:
             post.status = ActivityPost.Status.EXPIRED
             post.save(update_fields=["status", "updated_at"])
