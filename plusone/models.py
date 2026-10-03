@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import models
 from django.db.models import Count, Q
@@ -50,9 +52,11 @@ class CampusLocation(models.Model):
 
 class ActivityPostQuerySet(models.QuerySet):
     def active(self):
+        now = timezone.now()
         return (
-            self.filter(status=ActivityPost.Status.ACTIVE, expire_time__gt=timezone.now())
-            .annotate(holding_matches=Count("matches", filter=Q(matches__status__in=Match.HOLDING_STATUSES)))
+            self.filter(status=ActivityPost.Status.ACTIVE, expire_time__gt=now)
+            .filter(Q(expected_end_time__gt=now) | Q(expected_end_time__isnull=True, start_time__gt=now - timedelta(hours=1)))
+            .annotate(holding_matches=Count("matches", filter=Q(matches__status__in=Match.HOLDING_STATUSES, matches__meetup_cancelled_at__isnull=True)))
             .filter(holding_matches__lt=1)
         )
 
@@ -71,6 +75,7 @@ class ActivityPost(models.Model):
     class Status(models.TextChoices):
         ACTIVE = "active", "Active"
         MATCHED = "matched", "Matched"
+        PAUSED = "paused", "Recruiting paused"
         EXPIRED = "expired", "Expired"
         CANCELLED = "cancelled", "Cancelled"
 
@@ -110,6 +115,10 @@ class ActivityPost(models.Model):
     def is_expired(self):
         return self.expire_time <= timezone.now() or self.status == self.Status.EXPIRED
 
+    @property
+    def activity_window_end(self):
+        return self.expected_end_time or self.start_time + timedelta(hours=1)
+
     def mark_expired_if_needed(self, save=True):
         if self.expire_time <= timezone.now() and self.status == self.Status.ACTIVE:
             self.status = self.Status.EXPIRED
@@ -119,7 +128,7 @@ class ActivityPost(models.Model):
 
     @property
     def held_spots(self):
-        return self.matches.filter(status__in=Match.HOLDING_STATUSES).count()
+        return self.matches.filter(status__in=Match.HOLDING_STATUSES, meetup_cancelled_at__isnull=True).count()
 
     @property
     def spots_remaining(self):
@@ -166,6 +175,11 @@ class Match(models.Model):
     LIVE_STATUSES = (Status.WAITING, Status.CHATTING)
     HOLDING_STATUSES = (*LIVE_STATUSES, Status.AGREED)
 
+    class ArrivalStatus(models.TextChoices):
+        PENDING = "pending", "Not reported"
+        ARRIVED = "arrived", "Arrived (self-reported)"
+        DELAYED = "delayed", "Running late (self-reported)"
+
     post = models.ForeignKey(ActivityPost, on_delete=models.CASCADE, related_name="matches")
     poster = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="posted_matches")
     swiper = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="swiped_matches")
@@ -187,6 +201,25 @@ class Match(models.Model):
     poster_last_present_at = models.DateTimeField(null=True, blank=True)
     swiper_last_present_at = models.DateTimeField(null=True, blank=True)
     chat_started_at = models.DateTimeField(null=True, blank=True)
+    # This arrangement belongs to the pair, independently of the public card.
+    meeting_point = models.CharField(max_length=160, blank=True)
+    plan_meeting_at = models.DateTimeField(null=True, blank=True)
+    plan_expected_end_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    plan_revision = models.PositiveIntegerField(default=1)
+    poster_agreed_revision = models.PositiveIntegerField(null=True, blank=True)
+    swiper_agreed_revision = models.PositiveIntegerField(null=True, blank=True)
+    plan_confirmed_at = models.DateTimeField(null=True, blank=True)
+    plan_legacy = models.BooleanField(default=False)
+    meetup_cancelled_at = models.DateTimeField(null=True, blank=True)
+    meetup_cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="cancelled_meetups")
+    poster_arrival_status = models.CharField(max_length=12, choices=ArrivalStatus.choices, default=ArrivalStatus.PENDING)
+    swiper_arrival_status = models.CharField(max_length=12, choices=ArrivalStatus.choices, default=ArrivalStatus.PENDING)
+    poster_delay_minutes = models.PositiveSmallIntegerField(default=0)
+    swiper_delay_minutes = models.PositiveSmallIntegerField(default=0)
+    poster_meetup_outcome = models.CharField(max_length=12, blank=True)
+    swiper_meetup_outcome = models.CharField(max_length=12, blank=True)
+    poster_outcome_reason = models.CharField(max_length=20, blank=True)
+    swiper_outcome_reason = models.CharField(max_length=20, blank=True)
 
     class Meta:
         constraints = [
@@ -231,6 +264,20 @@ class Match(models.Model):
         from plusone.services.chat import record_agreement
         record_agreement(self.pk, user)
         self.refresh_from_db()
+
+
+class MeetupAction(models.Model):
+    """Durable acknowledgement for an individual plan/logistics action."""
+
+    match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="meetup_actions")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    request_id = models.UUIDField()
+    request_fingerprint = models.CharField(max_length=64)
+    result = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["match", "actor", "request_id"], name="unique_meetup_action_request")]
 
 
 class ChatMessage(models.Model):
@@ -312,6 +359,10 @@ class ProductEvent(models.Model):
         FIRST_REPLY_RECEIVED = "first_reply_received", "First reply received"
         AGREE_CLICKED = "agree_clicked", "Agree clicked"
         MEETUP_CONFIRMED = "meetup_confirmed", "Meetup outcome confirmed"
+        PLAN_UPDATED = "plan_updated", "Meetup plan updated"
+        MEETUP_STATUS_UPDATED = "meetup_status_updated", "Meetup status self-reported"
+        MEETUP_CANCELLED = "meetup_cancelled", "Meetup cancelled"
+        MEETUP_OUTCOME = "meetup_outcome", "Meetup outcome self-reported"
 
     name = models.CharField(max_length=40, choices=Name.choices)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)

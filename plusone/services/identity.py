@@ -78,6 +78,7 @@ def retire_anonymous_identity(user):
     # Resetting an identity must also close live state from the old identity;
     # otherwise stale anonymous users could keep appearing in Discover/chat.
     from plusone.services.lifecycle import end_locked, locked_match, lock_users
+    from plusone.services.meetups import _effective_times, cancel_meetup_locked
     from plusone.services.posts import cancel_activity_post
     # Fence in-flight requests before enumerating state. Every create/activate
     # path rechecks this flag under the same user lock after external work.
@@ -88,14 +89,24 @@ def retire_anonymous_identity(user):
             profile.retired_at = timezone.now()
             profile.save(update_fields=["retired_at"])
     posts = 0
-    matches = Match.objects.filter(Q(poster=user) | Q(swiper=user), status__in=Match.LIVE_STATUSES).count()
-    for post in ActivityPost.objects.filter(user=user, status__in=[ActivityPost.Status.ACTIVE, ActivityPost.Status.MATCHED]).exclude(matches__status=Match.Status.AGREED):
-        cancel_activity_post(post)
-        posts += 1
-    ids = list(Match.objects.filter(Q(poster=user) | Q(swiper=user), status__in=Match.LIVE_STATUSES).values_list("pk", flat=True))
+    participant = Q(poster=user) | Q(swiper=user)
+    ids = list(Match.objects.filter(participant).filter(
+        Q(status__in=Match.LIVE_STATUSES)
+        | Q(status=Match.Status.AGREED, meetup_cancelled_at__isnull=True)
+    ).values_list("pk", flat=True))
+    matches = 0
     for match_id in ids:
         with locked_match(match_id) as match:
-            end_locked(match, reason=Match.CloseReason.RESET, user=user)
+            if match.status == Match.Status.AGREED:
+                if _effective_times(match)[1] > timezone.now():
+                    matches += cancel_meetup_locked(match, user, reason="identity_reset")
+            else:
+                matches += end_locked(match, reason=Match.CloseReason.RESET, user=user)
+    for post in ActivityPost.objects.filter(user=user, status__in=[ActivityPost.Status.ACTIVE, ActivityPost.Status.MATCHED, ActivityPost.Status.PAUSED]):
+        # Cancelling retired supply does not rewrite an already-ended agreement.
+        # Its accepted snapshot and feedback evidence remain protected.
+        cancel_activity_post(post)
+        posts += 1
     return {"posts": posts, "matches": matches}
 
 

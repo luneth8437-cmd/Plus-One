@@ -480,7 +480,8 @@ class PlusOneTestCase(TestCase):
         match = Match.objects.get(post=post, swiper=swiper_user)
         chat_response = swiper.get(reverse("chat", args=[match.id]))
         self.assertEqual(chat_response.status_code, 200)
-        self.assertContains(chat_response, "Anonymous vibe chat")
+        self.assertContains(chat_response, "Waiting room")
+        self.assertContains(chat_response, "data-chat-compose hidden")
 
     def test_expired_posts_do_not_appear_in_discovery(self):
         self.post.expire_time = timezone.now() - timedelta(minutes=1)
@@ -783,7 +784,7 @@ class PlusOneTestCase(TestCase):
         match.refresh_from_db()
         self.assertEqual(match.status, Match.Status.CHATTING)
         self.assertTrue(match.swiper_agreed)
-        self.assertContains(response, "You agreed. Waiting for the other person.")
+        self.assertContains(response, "You agreed to this plan. Waiting for your Plus One")
         self.assertContains(response, "data-handoff-card hidden")
 
     def test_chat_page_shows_decision_guidance_and_quick_replies(self):
@@ -798,13 +799,13 @@ class PlusOneTestCase(TestCase):
         response = self.client.get(reverse("chat", args=[match.id]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "You have five minutes to decide if you both want to meet.")
+        self.assertContains(response, "Check the details, then both agree to the same meeting plan.")
         self.assertContains(response, "Where exactly?")
-        self.assertContains(response, "There in 5")
+        self.assertContains(response, "Check the time")
         self.assertContains(response, "data-chat-warning")
-        self.assertContains(response, "Decline closes this match without a report.")
-        self.assertContains(response, "Decline match")
-        self.assertContains(response, "Report safety issue")
+        self.assertContains(response, "Exit this match")
+        self.assertContains(response, "Report a safety issue")
+        self.assertContains(response, "data-plan-edit-form")
         self.assertContains(response, "data-confirm-submit")
 
     def test_both_agree_shows_meet_handoff_and_closes_input(self):
@@ -822,14 +823,13 @@ class PlusOneTestCase(TestCase):
         match.refresh_from_db()
         self.assertEqual(match.status, Match.Status.AGREED)
         self.assertContains(response, "Meet handoff ready.")
-        self.assertContains(response, "You both agreed to meet.")
-        self.assertContains(response, "Safety check")
+        self.assertContains(response, "Both people agreed to this place and time.")
         self.assertContains(response, self.post.location.name)
         self.assertContains(response, "Meet in a public place.")
-        self.assertContains(response, "Leave or report if anything feels off.")
-        self.assertContains(response, "Back to Dashboard")
-        self.assertNotContains(response, "data-chat-compose")
-        self.assertContains(response, 'data-chat-action="agree" disabled')
+        self.assertContains(response, "Leave or report if anything feels unsafe.")
+        self.assertContains(response, "Back to My Plus Ones")
+        self.assertContains(response, "data-chat-compose hidden")
+        self.assertFalse(response.context["plan"]["can_confirm"])
 
     def test_agreed_match_does_not_accept_new_message(self):
         match = Match.objects.create(
@@ -870,7 +870,7 @@ class PlusOneTestCase(TestCase):
         self.assertEqual(match.status, Match.Status.DECLINED)
         self.assertEqual(match.close_reason, Match.CloseReason.DECLINED)
         self.assertEqual(self.post.status, ActivityPost.Status.ACTIVE)
-        self.assertContains(response, "This chat was closed by a participant.")
+        self.assertContains(response, "A participant exited this match.")
         self.assertTrue(ChatMessage.objects.filter(match=match, is_system=True, message__icontains="has ended").exists())
 
     def test_report_closes_chat_and_records_reason(self):

@@ -85,7 +85,7 @@ def _record_swipe(user, post_id, action):
 
         if _post_is_full(post):
             return SwipeResult(SwipeOutcome.FULL_POST, post.id), created_match
-        if post.status != ActivityPost.Status.ACTIVE or post.is_expired:
+        if post.status != ActivityPost.Status.ACTIVE or post.is_expired or post.activity_window_end <= timezone.now():
             return SwipeResult(SwipeOutcome.INACTIVE_POST, post.id), created_match
 
         Swipe.objects.update_or_create(user=user, post=post, defaults={"action": action})
@@ -105,6 +105,9 @@ def _record_swipe(user, post_id, action):
         )
         if not created:
             return SwipeResult(SwipeOutcome.MATCH_EXISTS, post.id, match.id), created_match
+
+        from plusone.services.meetups import initialize_plan_locked
+        initialize_plan_locked(match)
 
         post.status = (
             ActivityPost.Status.MATCHED
@@ -145,6 +148,6 @@ def _swipe_lock_fallback(user, post_id, action):
         return SwipeResult(SwipeOutcome.PASSED, post.id)
     if _post_is_full(post):
         return SwipeResult(SwipeOutcome.FULL_POST, post.id)
-    if post.status != ActivityPost.Status.ACTIVE:
+    if post.status != ActivityPost.Status.ACTIVE or post.activity_window_end <= timezone.now():
         return SwipeResult(SwipeOutcome.INACTIVE_POST, post.id)
     return SwipeResult(SwipeOutcome.TRY_AGAIN, post.id)

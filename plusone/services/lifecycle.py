@@ -64,6 +64,11 @@ def end_locked(match, *, status=Match.Status.EXPIRED, reason=Match.CloseReason.T
 
 
 def expire_locked(match, now=None):
+    if match.plan_meeting_at is None:
+        # Old/imported rows acquire the original arrangement only. Their
+        # confirmations, deadlines, and unknown end time are not fabricated.
+        from plusone.services.meetups import initialize_plan_locked
+        initialize_plan_locked(match, legacy=True)
     now = now or timezone.now()
     deadline = match.phase_deadline
     if match.status == Match.Status.WAITING:
@@ -108,6 +113,7 @@ def set_presence(match_id, user, visible):
 
 
 def phase_payload(match, user):
+    from plusone.services.meetups import plan_payload
     now = timezone.now()
     threshold = now - timedelta(seconds=15)
     poster = user.pk == match.poster_id
@@ -122,4 +128,5 @@ def phase_payload(match, user):
         "other_agreed": match.swiper_agreed if poster else match.poster_agreed,
         "viewer_present": bool(mine and mine >= threshold),
         "other_present": bool(other and other >= threshold),
+        "plan": plan_payload(match, user),
     }

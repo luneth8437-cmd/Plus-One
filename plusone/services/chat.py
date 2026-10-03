@@ -28,14 +28,12 @@ def record_agreement(match_id, user):
             end_locked(match, reason=Match.CloseReason.RESET)
         if match.status != Match.Status.CHATTING:
             return AgreementResult(False, match.id)
-        field = "poster_agreed" if user.pk == match.poster_id else "swiper_agreed"
-        if not getattr(match, field):
-            setattr(match, field, True)
-            match.status = Match.Status.AGREED if match.poster_agreed and match.swiper_agreed else Match.Status.CHATTING
-            match.save(update_fields=[field, "status"])
-            log_event(ProductEvent.Name.AGREE_CLICKED, user=user, match=match, properties={"both_agreed": match.status == Match.Status.AGREED})
-            if match.status == Match.Status.AGREED:
-                log_event(ProductEvent.Name.BOTH_AGREED, match=match)
+        # Old pages can confirm only the untouched original arrangement.
+        # An edited plan must be explicitly reviewed with its current revision.
+        if match.plan_revision != 1:
+            return AgreementResult(False, match.id)
+        from plusone.services.meetups import confirm_plan_locked
+        confirm_plan_locked(match, user, 1)
         return AgreementResult(True, match.id)
 
 
@@ -69,7 +67,11 @@ def report_match(match_id, user, category="other", reason=""):
             report.reason = reason
             report.save(update_fields=["category", "reason", "status", "updated_at"])
         expire_locked(match)
-        end_locked(match, status=Match.Status.DECLINED, reason=Match.CloseReason.REPORTED, user=user)
+        if match.status == Match.Status.AGREED:
+            from plusone.services.meetups import cancel_meetup_locked
+            cancel_meetup_locked(match, user, reason="reported")
+        else:
+            end_locked(match, status=Match.Status.DECLINED, reason=Match.CloseReason.REPORTED, user=user)
         return report
 
 
@@ -113,7 +115,27 @@ def create_chat_message(match, user, text, request_id=None):
 
 def confirm_meetup(match_id, user):
     with locked_match(match_id) as match:
-        if not match.is_participant(user) or match.status != Match.Status.AGREED:
+        if not match.is_participant(user) or match.status != Match.Status.AGREED or match.meetup_cancelled_at or match.plan_revision != 1:
             return False
+        if identities_retired([user.pk]):
+            return False
+        expire_locked(match)
+        from plusone.services.meetups import _effective_times, effective_outcome
+        from datetime import timedelta
+        from django.utils import timezone
+        meeting_at, end_at = _effective_times(match)
+        if not meeting_at <= timezone.now() <= end_at + timedelta(hours=24):
+            return False
+        # Preserve old original-plan pages while synchronizing their outcome
+        # with the new handoff UI. Edited plans use the versioned dispatcher.
+        mine = "poster" if user.pk == match.poster_id else "swiper"
+        existing_outcome = effective_outcome(match, user.pk)
+        if existing_outcome == "met":
+            return True
+        if existing_outcome == "not_met":
+            return False
+        if not getattr(match, f"{mine}_meetup_outcome"):
+            setattr(match, f"{mine}_meetup_outcome", "met")
+            match.save(update_fields=[f"{mine}_meetup_outcome"])
         log_event(ProductEvent.Name.MEETUP_CONFIRMED, user=user, match=match)
         return True

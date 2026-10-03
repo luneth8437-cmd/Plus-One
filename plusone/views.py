@@ -18,6 +18,7 @@ from .services.analytics import log_event
 from .presenters import chat_message_payload, post_edit_initial, post_form_preview, post_initial_from_ai
 from .selectors import dashboard_context_for_user, discover_context_for_user
 from .services.chat import close_match, create_chat_message, record_agreement, report_match, confirm_meetup
+from .services.meetups import perform_meetup_action
 from .services.lifecycle import locked_match, expire_locked, phase_payload, set_presence
 from .services.requests import RequestError, consume_limit
 from .services.expiration import refresh_expired_records
@@ -220,11 +221,16 @@ def post_detail(request, post_id):
     refresh_expired_records()
     post = get_object_or_404(ActivityPost.objects.select_related("user", "location"), id=post_id)
     existing_swipe = Swipe.objects.filter(user=request.user, post=post).first()
-    post_is_active = post.status == ActivityPost.Status.ACTIVE and not post.is_expired
+    post_window_finished = post.activity_window_end <= timezone.now()
+    post_is_active = post.status == ActivityPost.Status.ACTIVE and not post.is_expired and not post_window_finished
+    paused_match = None
+    if post.user_id == request.user.id and post.status == ActivityPost.Status.PAUSED:
+        paused_match = post.matches.filter(meetup_cancelled_at__isnull=False).order_by("-meetup_cancelled_at").first()
     return render(
         request,
         "plusone/post_detail.html",
-        {"post": post, "existing_swipe": existing_swipe, "post_is_active": post_is_active},
+        {"post": post, "existing_swipe": existing_swipe, "post_is_active": post_is_active,
+         "post_window_finished": post_window_finished, "paused_match": paused_match},
     )
 
 
@@ -239,8 +245,12 @@ def edit_post(request, post_id):
         return redirect("dashboard")
 
     if request.method == "POST" and request.POST.get("action") == "cancel":
-        cancel_activity_post(post)
-        messages.info(request, "Your Plus One card was cancelled.")
+        try:
+            cancel_activity_post(post, require_active=True)
+        except RequestError as error:
+            messages.warning(request, str(error))
+        else:
+            messages.info(request, "Your Plus One card was cancelled.")
         return redirect("dashboard")
 
     form = ActivityPostForm(initial=post_edit_initial(post), instance=post)
@@ -363,9 +373,12 @@ def chat(request, match_id):
                 return redirect("chat", match_id=match.id)
 
     if request.method == "POST" and request.POST.get("action") == "agree":
-        agreement = record_agreement(match.id, request.user)
-        if agreement.recorded:
-            messages.success(request, "Your agreement was recorded.")
+        try:
+            agreement = record_agreement(match.id, request.user)
+            if agreement.recorded:
+                messages.success(request, "Your agreement was recorded.")
+        except RequestError as error:
+            messages.error(request, str(error))
         return redirect("chat", match_id=match.id)
 
     if request.method == "POST" and request.POST.get("action") in {"decline", "report"}:
@@ -375,8 +388,15 @@ def chat(request, match_id):
                 report_match(match.pk, request.user, request.POST.get("category", "other"), request.POST.get("reason", ""))
                 messages.warning(request, "Safety report recorded. Any open conversation has been closed.")
             else:
-                close_match(match.pk, request.user, Match.CloseReason.DECLINED)
-                messages.info(request, "This match is closed.")
+                closed = close_match(match.pk, request.user, Match.CloseReason.DECLINED)
+                if closed.closed:
+                    messages.info(request, "This match is closed.")
+                else:
+                    match.refresh_from_db()
+                    if match.status == Match.Status.AGREED and not match.meetup_cancelled_at:
+                        messages.warning(request, "Both people already confirmed a meetup. Review the plan and use Cancel meetup if you no longer want to meet.")
+                    else:
+                        messages.info(request, "This match was already closed.")
             return redirect("chat", match_id=match.id)
         except RequestError as error:
             response_status = error.status
@@ -404,11 +424,10 @@ def chat(request, match_id):
         else:
             messages.error(request, "This chat is no longer active.")
 
-    viewer_agreed = match.poster_agreed if request.user.id == match.poster_id else match.swiper_agreed
-    other_agreed = match.swiper_agreed if request.user.id == match.poster_id else match.poster_agreed
     with locked_match(match.pk) as match:
         expire_locked(match)
         messages_list = list(match.messages.select_related("sender").order_by("id"))
+        meetup_payload = phase_payload(match, request.user)
     response = render(
         request,
         "plusone/chat.html",
@@ -417,8 +436,11 @@ def chat(request, match_id):
             "messages_list": messages_list,
             "last_message_id": messages_list[-1].id if messages_list else 0,
             "form": form,
-            "viewer_agreed": viewer_agreed,
-            "other_agreed": other_agreed,
+            "viewer_agreed": meetup_payload["viewer_agreed"],
+            "other_agreed": meetup_payload["other_agreed"],
+            "meetup_payload": meetup_payload,
+            "plan": meetup_payload["plan"],
+            "plan_request_id": str(uuid4()),
             "phase_deadline": match.phase_deadline,
             "server_time": timezone.now(),
             "request_id": request.POST.get("request_id") or str(uuid4()),
@@ -437,6 +459,48 @@ def chat(request, match_id):
     if retry_after:
         response["Retry-After"] = str(retry_after)
     return response
+
+
+@login_required
+@require_POST
+def chat_plan(request, match_id):
+    """Mutate only this participant's shared plan, with durable retry IDs."""
+    match = get_object_or_404(Match, pk=match_id)
+    if not match.is_participant(request.user):
+        return HttpResponseForbidden("Only matched users can change this plan.")
+    wants_json = "application/json" in request.headers.get("Accept", "")
+    try:
+        result = perform_meetup_action(
+            match.pk,
+            request.user,
+            request.POST.get("action", ""),
+            request.POST.get("request_id"),
+            request.POST.get("revision"),
+            meeting_point=request.POST.get("meeting_point"),
+            meeting_at=request.POST.get("meeting_at"),
+            expected_end_at=request.POST.get("expected_end_at"),
+            delay_minutes=request.POST.get("delay_minutes"),
+            outcome=request.POST.get("outcome"),
+            outcome_reason=request.POST.get("outcome_reason"),
+        )
+    except RequestError as error:
+        if wants_json:
+            with locked_match(match.pk) as current:
+                expire_locked(current)
+                state = phase_payload(current, request.user)
+            response = JsonResponse(
+                {"ok": False, "error": str(error), "retry_after": error.retry_after, **state},
+                status=error.status,
+            )
+            if error.retry_after:
+                response["Retry-After"] = str(error.retry_after)
+            return response
+        messages.error(request, str(error))
+    else:
+        if wants_json:
+            return JsonResponse({"ok": True, **result})
+        messages.success(request, result.get("action_result", {}).get("message", "Your plan was updated."))
+    return redirect("chat", match_id=match.pk)
 
 
 @login_required

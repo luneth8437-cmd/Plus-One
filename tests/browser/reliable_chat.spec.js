@@ -58,7 +58,7 @@ test("two isolated users complete a reliable waiting, chat, replay, agreement, a
     await expect(joiner.locator("[data-chat-form] input[name='message']")).toBeDisabled();
     await expect(joiner.locator("[data-chat-action='agree']")).toBeDisabled();
     await expect(joiner.locator("[data-chat-action='ai']")).toBeDisabled();
-    await expect(joiner.getByRole("button", { name: "Decline match" })).toBeEnabled();
+    await expect(joiner.getByRole("button", { name: "Exit this match" })).toBeEnabled();
     await expect(joiner.getByText("Report a safety issue")).toBeVisible();
 
     await poster.goto("/dashboard/");
@@ -73,6 +73,11 @@ test("two isolated users complete a reliable waiting, chat, replay, agreement, a
     });
     expect(remainingSeconds).toBeGreaterThan(240);
     expect(remainingSeconds).toBeLessThanOrEqual(310);
+
+    await poster.locator("[data-plan-editor]").evaluate((node) => { node.open = true; });
+    await poster.locator("#meeting-point").fill("Sports hall main entrance");
+    await poster.locator("[data-plan-edit-form] [data-plan-action='update_plan']").click();
+    await expect(joiner.locator("[data-plan-point]").first()).toHaveText("Sports hall main entrance");
 
     const posterInput = poster.locator("[data-chat-form] input[name='message']");
     await posterInput.fill("Hello from the poster");
@@ -132,11 +137,11 @@ test("two isolated users complete a reliable waiting, chat, replay, agreement, a
     await posterInput.fill(lostText);
     await poster.getByRole("button", { name: "Send" }).click();
     await expect(poster.locator("[data-chat-warning]")).toContainText(/result is unknown/i);
-    await expect(poster.locator("[data-chat-sync-status]")).toHaveText("Connection interrupted. Retrying…");
+    await expect(poster.locator("[data-chat-sync-status]")).toContainText("Connection interrupted. Retrying");
     await expect(poster.locator("[data-chat-draft-recovery]")).toBeVisible();
     await expect(poster.locator("[data-chat-recovery-text]")).toHaveValue(lostText);
+    await poster.locator("[data-retry-chat-request]").click();
     blockPoll = false;
-    await poster.getByRole("button", { name: "Check the same request again" }).click();
     await expect(poster.locator(".bubble p", { hasText: lostText })).toHaveCount(1);
     await expect(poster.locator("[data-chat-sync-status]")).toBeHidden();
     await expect(poster.locator("[data-chat-draft-recovery]")).toBeHidden();
@@ -178,20 +183,23 @@ test("two isolated users complete a reliable waiting, chat, replay, agreement, a
     await expect(poster.locator("[data-chat-warning]")).toContainText(/result is unknown/i);
 
     const posterAgreeStatus = await poster.evaluate(async () => {
+      const root = document.querySelector("[data-chat-root]");
       const csrf = document.querySelector("[name=csrfmiddlewaretoken]").value;
       const body = new FormData();
       body.set("csrfmiddlewaretoken", csrf);
-      body.set("action", "agree");
-      const response = await fetch(window.location.href, { method: "POST", body, redirect: "manual" });
+      body.set("action", "confirm_plan");
+      body.set("request_id", crypto.randomUUID());
+      body.set("revision", document.querySelector("[data-plan-action='confirm_plan']").closest("form").querySelector("[name=revision]").value);
+      const response = await fetch(root.dataset.planEndpoint, { method: "POST", body, headers: { Accept: "application/json" } });
       return response.status;
     });
-    expect([0, 302]).toContain(posterAgreeStatus);
+    expect(posterAgreeStatus).toBe(200);
     await expect(joiner.locator("[data-other-agreed]")).toHaveText("yes", { timeout: 10_000 });
     await joiner.locator("[data-chat-action='agree']").click();
     await expect(joiner.locator("[data-chat-root]")).toHaveAttribute("data-chat-status", "agreed");
     await expect(joiner.getByRole("heading", { name: "Meet handoff ready." })).toBeVisible();
 
-    await poster.getByRole("button", { name: "Check the same request again" }).click();
+    await poster.locator("[data-retry-chat-request]").click();
     await expect(poster.locator(".bubble p", { hasText: closedLostText })).toHaveCount(1);
     await expect(poster.locator("[data-chat-draft-recovery]")).toBeHidden();
     await poster.unroute("**/messages/**");

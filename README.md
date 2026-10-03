@@ -63,7 +63,8 @@ Campus plans often fail because students do not know who is free right now, who 
 - Time-limited campus activity cards with an expected meetup window, created from structured fields or casual text.
 - Discovery filters and one-to-one matching, followed by a waiting room until both chat pages are recently present.
 - A fixed five-minute private chat with ordered message sync, duplicate protection, bounded retries, and visible connection recovery.
-- Meet handoff after both people agree, with place, time, and a short safety reminder.
+- A shared meeting point and time; changing either clears both confirmations without restarting the five-minute clock.
+- Meet handoff after both people confirm the same plan, with self-reported arrival, five/ten-minute delay, cancellation, and meetup feedback.
 - AI-assisted post parsing and optional suggestions with deterministic fallback; production safety moderation fails closed and preserves input when unavailable.
 - Participant reporting during waiting, chat, and completed handoffs, plus an admin review queue.
 - Dashboard and in-site updates for waiting, chatting, agreed, expired, and cancelled plans.
@@ -101,9 +102,16 @@ Create a temporary card
   -> Match reserves one slot and opens a waiting room
   -> Both chat pages become recently present
   -> One fixed five-minute chat starts
-  -> Both users agree
-  -> Meet handoff appears with safety reminders
+  -> Review the shared meeting point, time, and expected end
+  -> Both users confirm the same plan
+  -> Meet handoff appears with arrival, delay, cancellation, and feedback
 ```
+
+Cancelling an agreed meetup pauses recruitment for the original card. Its
+publisher can explicitly continue recruiting while the original card and start
+time are still valid. A delay signal does not move the agreed meeting time.
+Meeting outcomes are each participant's own report, not verified attendance.
+See [meeting interactions and rollout](docs/engineering/meetup_interactions.md).
 
 ## Architecture
 
@@ -235,9 +243,9 @@ To run one hosted instance that keeps `DEEPSEEK_API_KEY` on the server and lets 
 6. Swipe interested.
 7. Confirm the match modal and enter the waiting room.
 8. Open the same match from the first browser; only then does the fixed five-minute chat begin.
-9. Send messages, retry safely after a lost response if needed, and agree to meet.
-10. When both people agree, review the meet handoff, safety reminder, and report option.
-11. View My Plus Ones dashboard.
+9. Send messages, review or edit the shared public meeting point and time, and both confirm the current plan. Changes require both people to confirm again.
+10. Revisit the confirmed plan from My Plus Ones; mark arrival, signal a delay, cancel, or submit your own meetup feedback when available.
+11. After cancellation, the original card stays paused until its publisher explicitly reopens it while it is still valid. The safety report remains available.
 
 ## Tests
 
@@ -245,4 +253,4 @@ To run one hosted instance that keeps `DEEPSEEK_API_KEY` on the server and lets 
 .venv/bin/python manage.py test
 ```
 
-The acceptance suite contains 192 Django tests across SQLite and PostgreSQL, JavaScript reliability tests, migration checks, and a two-browser Chromium flow covering expected meetup time, WAITING activation, cross-client messages, weak-network replay, agreement, and post-handoff reporting. CI uses isolated test databases and never uses production data.
+The acceptance suite contains 256 Django tests across SQLite and PostgreSQL, 12 JavaScript reliability tests, migration checks, and two-person Chromium flows covering waiting, messages, shared plan edits, weak-network replay, agreement, arrival, delay, personal feedback, cancellation, identity reset, recruitment, and post-handoff reporting. See [meeting interaction validation](docs/engineering/meetup_interactions.md) for the verified scope and deployment limits. CI uses isolated test databases and never uses production data.

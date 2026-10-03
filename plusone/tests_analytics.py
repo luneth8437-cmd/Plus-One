@@ -213,7 +213,7 @@ class MeetupConfirmationTests(TestCase):
             description="Casual game",
             activity_type=ActivityPost.ActivityType.SPORTS,
             location=location,
-            start_time=timezone.now() + timedelta(hours=3),
+            start_time=timezone.now() - timedelta(minutes=15),
             expire_time=timezone.now() + timedelta(hours=1),
         )
         self.match = Match.objects.create(
@@ -250,7 +250,27 @@ class MeetupConfirmationTests(TestCase):
 
         response = self.client.get(url)
         self.assertNotContains(response, "We met - record it")
-        self.assertContains(response, "Meetup recorded")
+        self.assertContains(response, "You reported that you met")
+
+    def test_legacy_confirmation_is_rejected_before_meeting_time(self):
+        from django.urls import reverse
+
+        ActivityPost.objects.filter(pk=self.match.post_id).update(start_time=timezone.now() + timedelta(hours=3))
+        self.client.force_login(self.swiper)
+        self.client.post(reverse("chat", args=[self.match.pk]), {"action": "confirm_meetup"})
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.swiper_meetup_outcome, "")
+        self.assertFalse(ProductEvent.objects.filter(name=ProductEvent.Name.MEETUP_CONFIRMED).exists())
+
+    def test_legacy_confirmation_is_rejected_after_feedback_window(self):
+        from django.urls import reverse
+
+        ActivityPost.objects.filter(pk=self.match.post_id).update(start_time=timezone.now() - timedelta(hours=48))
+        self.client.force_login(self.swiper)
+        self.client.post(reverse("chat", args=[self.match.pk]), {"action": "confirm_meetup"})
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.swiper_meetup_outcome, "")
+        self.assertFalse(ProductEvent.objects.filter(name=ProductEvent.Name.MEETUP_CONFIRMED).exists())
 
     def test_confirmation_is_rejected_before_both_agree(self):
         from django.urls import reverse

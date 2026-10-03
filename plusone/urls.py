@@ -23,5 +23,6 @@ urlpatterns = [
     path("chat/<int:match_id>/", views.chat, name="chat"),
     path("chat/<int:match_id>/messages/", views.chat_messages, name="chat_messages"),
     path("chat/<int:match_id>/presence/", views.chat_presence, name="chat_presence"),
+    path("chat/<int:match_id>/plan/", views.chat_plan, name="chat_plan"),
     path("chat/<int:match_id>/opener-click/", views.opener_click, name="opener_click"),
 ]

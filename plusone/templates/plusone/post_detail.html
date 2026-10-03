@@ -23,8 +23,14 @@
         <a class="primary-action" href="{% url 'edit_post' post.id %}">Edit this card</a>
       {% elif post.status == "matched" %}
         <p class="notice owner-notice">This card has a match and is no longer in Discover.</p>
+      {% elif post.status == "paused" and not post.is_expired %}
+        <p class="notice owner-notice">Recruiting is paused after the meetup was cancelled. Your card is not in Discover.</p>
+        {% if paused_match %}<a class="primary-action" href="{% url 'chat' paused_match.id %}">Review cancelled meetup</a>{% else %}<a class="primary-action" href="{% url 'dashboard' %}">My Plus Ones</a>{% endif %}
+        <p class="helptext">Continue recruiting from the meeting plan while the original card and start time are still valid.</p>
       {% elif post.status == "cancelled" %}
         <p class="notice owner-notice">This card was cancelled.</p>
+      {% elif post_window_finished %}
+        <p class="notice owner-notice">This activity's time window has ended.</p>
       {% else %}
         <p class="notice owner-notice">This card has expired.</p>
       {% endif %}

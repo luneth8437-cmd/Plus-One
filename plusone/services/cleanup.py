@@ -40,15 +40,23 @@ def _report_retention_days(value):
 def _agreement_protected_q(cutoff, prefix=""):
     """Protect AGREED matches until 24 hours after the expected meetup end.
 
-    Historical posts have no expected end, so they retain the previous
-    start-time-based boundary instead of receiving fabricated data.
+    Unknown historical end times use the same runtime one-hour window as
+    meetup feedback; the historical fields themselves remain unknown.
     """
     status = f"{prefix}status"
     expected_end = f"{prefix}post__expected_end_time"
     start = f"{prefix}post__start_time"
+    plan_end = f"{prefix}plan_expected_end_at"
+    plan_start = f"{prefix}plan_meeting_at"
     return Q(**{status: Match.Status.AGREED}) & (
-        Q(**{f"{expected_end}__gt": cutoff})
-        | Q(**{f"{expected_end}__isnull": True, f"{start}__gt": cutoff})
+        Q(**{f"{plan_end}__gte": cutoff})
+        | (Q(**{f"{plan_end}__isnull": True}) & (
+            Q(**{f"{expected_end}__gte": cutoff})
+            | (Q(**{f"{expected_end}__isnull": True}) & (
+                Q(**{f"{plan_start}__gte": cutoff - timedelta(hours=1)})
+                | Q(**{f"{plan_start}__isnull": True, f"{start}__gte": cutoff - timedelta(hours=1)})
+            ))
+        ))
     )
 
 
@@ -56,9 +64,17 @@ def _agreement_outside_protection_q(cutoff, prefix=""):
     status = f"{prefix}status"
     expected_end = f"{prefix}post__expected_end_time"
     start = f"{prefix}post__start_time"
+    plan_end = f"{prefix}plan_expected_end_at"
+    plan_start = f"{prefix}plan_meeting_at"
     return Q(**{status: Match.Status.AGREED}) & (
-        Q(**{f"{expected_end}__lte": cutoff})
-        | Q(**{f"{expected_end}__isnull": True, f"{start}__lte": cutoff})
+        Q(**{f"{plan_end}__lt": cutoff})
+        | (Q(**{f"{plan_end}__isnull": True}) & (
+            Q(**{f"{expected_end}__lt": cutoff})
+            | (Q(**{f"{expected_end}__isnull": True}) & (
+                Q(**{f"{plan_start}__lt": cutoff - timedelta(hours=1)})
+                | Q(**{f"{plan_start}__isnull": True, f"{start}__lt": cutoff - timedelta(hours=1)})
+            ))
+        ))
     )
 
 
@@ -237,8 +253,9 @@ def _report_message_candidates(now, report_cutoff, batch_size):
 def _match_evidence_is_protected(match, now, report_cutoff):
     if match.status in Match.LIVE_STATUSES:
         return True
-    meetup_end = match.post.expected_end_time or match.post.start_time
-    if match.status == Match.Status.AGREED and meetup_end > now - timedelta(hours=24):
+    from plusone.services.meetups import _effective_times
+    meetup_end = _effective_times(match)[1]
+    if match.status == Match.Status.AGREED and meetup_end >= now - timedelta(hours=24):
         return True
     return False
 

@@ -83,8 +83,10 @@ def save_activity_post_for_user(user, form, request_id=None, request_fingerprint
         return post
 
 
-def cancel_activity_post(post):
+def cancel_activity_post(post, *, require_active=False):
     with locked_post(post.pk) as current:
+        if require_active and (current.status != ActivityPost.Status.ACTIVE or current.held_spots):
+            raise RequestError("This card changed while you were editing. Review its current match before cancelling.", 409)
         current.status = ActivityPost.Status.CANCELLED
         current.save(update_fields=["status", "updated_at"])
         for match in Match.objects.select_for_update().filter(post=current, status__in=Match.LIVE_STATUSES).order_by("pk"):

@@ -7,7 +7,7 @@ ONE_TO_ONE_CAPACITY = 1
 
 
 def holding_match_count(post):
-    return Match.objects.filter(post=post, status__in=Match.HOLDING_STATUSES).count()
+    return Match.objects.filter(post=post, status__in=Match.HOLDING_STATUSES, meetup_cancelled_at__isnull=True).count()
 
 
 def effective_capacity(post=None):
@@ -21,6 +21,8 @@ def sync_locked_post(post):
         if post.status != ActivityPost.Status.EXPIRED:
             post.status = ActivityPost.Status.EXPIRED
             post.save(update_fields=["status", "updated_at"])
+        return post.status
+    if post.status == ActivityPost.Status.PAUSED:
         return post.status
 
     desired_status = (
@@ -47,7 +49,7 @@ def sync_post_status_for_capacity(post):
 def reopen_posts_with_available_capacity():
     ids = list(
         ActivityPost.objects.filter(status=ActivityPost.Status.MATCHED, expire_time__gt=timezone.now())
-        .annotate(holding_matches=Count("matches", filter=Q(matches__status__in=Match.HOLDING_STATUSES)))
+        .annotate(holding_matches=Count("matches", filter=Q(matches__status__in=Match.HOLDING_STATUSES, matches__meetup_cancelled_at__isnull=True)))
         .filter(holding_matches__lt=effective_capacity())
         .values_list("pk", flat=True)
     )

@@ -3203,3 +3203,182 @@ input:disabled {
     flex: 0 0 auto;
   }
 }
+
+/* One activity, one shared plan, one decision; keep the chat readable on phones. */
+.chat-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+  grid-template-areas: "header header" "alerts alerts" "conversation context";
+  align-items: start;
+  gap: 16px;
+}
+.chat-workspace [hidden] { display: none !important; }
+.chat-workspace .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.chat-room-header {
+  grid-area: header;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 18px;
+  padding: 20px 24px;
+}
+.chat-room-title { min-width: 0; }
+.chat-room-title h1 { font-size: clamp(22px, 3vw, 30px); line-height: 1.15; margin: 4px 0 6px; overflow-wrap: anywhere; }
+.chat-room-title p { margin: 0; color: var(--muted); font-size: 14px; }
+.chat-room-phase { display: grid; align-content: center; gap: 6px; justify-items: end; font-size: 14px; }
+.chat-room-phase [data-phase-timer] { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--muted); }
+.chat-room-phase .countdown { border-radius: 7px; background: #eefbf9; color: var(--ink); padding: 6px 9px; font-variant-numeric: tabular-nums; }
+.chat-room-header .chat-decision-copy { grid-column: 1 / -1; margin: 0; font-size: 14px; line-height: 1.5; }
+.chat-room-navigation { grid-column: 1 / -1; display: flex; gap: 18px; font-size: 13px; }
+.chat-room-navigation a { color: var(--muted); }
+.chat-room-alerts { grid-area: alerts; min-width: 0; }
+.chat-room-alerts:has(> :not([hidden])) { display: grid; gap: 8px; }
+.chat-room-alerts p { margin: 0; }
+.chat-room-alerts:empty { display: none; }
+.plan-request-status { display: grid; gap: 10px; padding: 14px 16px; background: #fffaf2; border: 1px solid var(--line); border-radius: 12px; font-size: 14px; }
+.plan-request-status button { justify-self: start; }
+.chat-workspace .chat-panel { grid-area: conversation; min-width: 0; min-height: 0; padding: 20px; }
+.chat-workspace .chat-context { grid-area: context; min-width: 0; padding: 20px; }
+.chat-workspace.phase-waiting { grid-template-areas: "header header" "alerts alerts" "waiting context"; }
+.waiting-room { grid-area: waiting; padding: 32px; text-align: center; }
+.waiting-room h2 { font-size: 25px; line-height: 1.25; margin: 16px 0 10px; }
+.waiting-room p { line-height: 1.55; }
+.waiting-symbol { display: grid; place-items: center; width: 100px; height: 72px; margin: 0 auto 20px; border-radius: 20px; background: #eefbf9; color: var(--teal-dark); font-size: 24px; font-weight: 800; }
+.presence-check { display: grid; gap: 10px; margin: 24px 0 12px; font-size: 14px; }
+.waiting-navigation-copy { padding-top: 16px; border-top: 1px solid var(--line); font-size: 14px; }
+.shared-meeting-plan { padding: 14px 16px; margin-bottom: 20px; border: 1px solid var(--line); border-radius: 12px; background: #f7fcfc; }
+.shared-meeting-plan > summary { cursor: pointer; display: grid; gap: 4px; list-style-position: inside; overflow-wrap: anywhere; }
+.shared-meeting-plan > summary .eyebrow { margin: 0; }
+.shared-meeting-plan > summary strong { font-size: 16px; }
+.shared-meeting-plan > summary [data-plan-time] { font-size: 14px; }
+.plan-summary-hint { font-size: 12px; color: var(--teal-dark); font-weight: 800; }
+.shared-meeting-plan .stacked-form { margin-top: 16px; gap: 8px; }
+.shared-meeting-plan .stacked-form label { font-size: 13px; }
+.shared-meeting-plan .stacked-form input { min-width: 0; width: 100%; }
+.plan-time-fields { padding: 8px 0; }
+.plan-time-fields > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.plan-time-fields[open] { display: grid; gap: 8px; }
+.plan-time-fields input { margin: 8px 0; }
+.plan-time-fields label { display: block; margin-top: 12px; }
+.plan-edit-warning { font-size: 13px; line-height: 1.5; background: #fff8e6; border-radius: 8px; padding: 10px; }
+.plan-revision-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.chat-workspace .messages-list { min-height: 180px; max-height: 440px; }
+.chat-workspace .chat-compose { margin-top: 12px; }
+.chat-workspace .chat-form { margin: 0; }
+.chat-ai-tools { margin-top: 10px; font-size: 12px; color: var(--muted); }
+.chat-ai-tools > summary { cursor: pointer; }
+.chat-ai-tools .opener-assist-form { margin-top: 10px; }
+.chat-decision-bar { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.chat-decision-bar .agree-state { flex-direction: row; flex-wrap: wrap; gap: 8px 18px; margin: 0 0 8px; font-size: 12px; }
+.confirmation-summary { margin: 0 0 8px; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.chat-decision-bar [data-agreement-controls] button { width: 100%; min-height: 44px; }
+.chat-decision-bar .notice { margin: 8px 0 0; font-size: 13px; }
+.chat-workspace .chat-leave-form { margin: 0; }
+.chat-workspace .report-panel { margin-top: 18px; }
+.chat-workspace .handoff-card { margin: 0; padding: 0; background: transparent; border: 0; gap: 16px; }
+.chat-workspace .handoff-card h2 { font-size: 26px; line-height: 1.2; }
+.final-plan-details { display: grid; gap: 12px; margin: 0; border-radius: 12px; padding: 16px; background: #eefbf9; }
+.final-plan-details > div { display: grid; gap: 4px; }
+.final-plan-details dt { font-size: 12px; color: var(--muted); }
+.final-plan-details dd { margin: 0; font-weight: 800; font-size: 16px; overflow-wrap: anywhere; }
+.meetup-progress { display: grid; gap: 12px; }
+.meetup-progress > div { display: grid; gap: 3px; font-size: 13px; }
+.meetup-progress span { color: var(--muted); }
+.meetup-logistics { display: grid; gap: 10px; }
+.meetup-logistics .delay-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.meetup-outcome { padding-top: 16px; border-top: 1px solid var(--line); }
+.meetup-outcome h3 { margin: 0 0 8px; font-size: 16px; }
+.meetup-outcome [data-outcome-actions] { display: grid; gap: 12px; }
+.not-met-feedback > summary { cursor: pointer; font-size: 14px; color: var(--muted); }
+.handoff-safety { padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; line-height: 1.5; }
+.chat-workspace[data-meetup-status="cancelled"] .final-plan-details { background: #f7f8fa; }
+.chat-workspace[data-meetup-status="cancelled"] .handoff-card h2 { color: #9f1239; }
+
+@media (max-width: 900px) {
+  .chat-workspace { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "alerts" "conversation" "context"; gap: 12px; }
+  .chat-workspace.phase-waiting { grid-template-areas: "header" "alerts" "waiting" "context"; }
+  .chat-workspace.phase-agreed { grid-template-areas: "header" "alerts" "context" "conversation"; }
+  .chat-workspace .chat-context { position: static; }
+}
+@media (max-width: 700px) {
+  .chat-workspace { display: grid; margin-top: 0; gap: 10px; }
+  .chat-room-header { position: sticky; top: 0; z-index: 6; padding: 12px 14px; gap: 6px 10px; }
+  .chat-room-title h1 { font-size: 20px; margin: 2px 0 4px; }
+  .chat-room-title p { font-size: 12px; }
+  .chat-room-title .eyebrow { display: none; }
+  .chat-room-phase { font-size: 12px; gap: 4px; max-width: 130px; }
+  .chat-room-phase [data-phase-timer] { justify-content: flex-end; gap: 3px; }
+  .chat-room-phase .countdown { padding: 4px 6px; }
+  .chat-room-header .chat-decision-copy { font-size: 12px; line-height: 1.4; }
+  .chat-room-navigation { gap: 16px; font-size: 12px; }
+  .chat-workspace .chat-panel, .chat-workspace .chat-context { padding: 14px; order: initial; }
+  .waiting-room { padding: 22px 18px; }
+  .waiting-room h2 { font-size: 22px; }
+  .chat-workspace .messages-list { max-height: 46dvh; min-height: 150px; }
+  .chat-workspace .shared-meeting-plan { margin-bottom: 12px; padding: 12px; }
+  .chat-workspace .chat-compose { margin-left: -14px; margin-right: -14px; padding: 10px 14px max(8px, env(safe-area-inset-bottom)); position: sticky; bottom: 0; z-index: 4; }
+  .chat-workspace .quick-replies { margin-bottom: 8px; }
+  .chat-workspace .quick-replies button { font-size: 12px; min-height: 32px; padding: 6px 10px; }
+  .chat-workspace .chat-form input { font-size: 16px; min-height: 44px; scroll-margin-bottom: 180px; }
+  .chat-workspace .chat-decision-bar { margin-top: 10px; padding-top: 10px; }
+  .chat-workspace .chat-decision-bar .agree-state { gap: 6px 14px; font-size: 11px; }
+  .chat-workspace .confirmation-summary { font-size: 12px; }
+  .chat-workspace.phase-agreed .messages-list { max-height: 240px; }
+  .chat-workspace.phase-agreed .chat-room-header { position: static; }
+}
+
+@media (max-width: 700px) {
+  body:has(.chat-workspace) .topbar {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 6px 10px;
+    padding: 10px 14px;
+  }
+  body:has(.chat-workspace) .brand-logo { width: 44px; height: 44px; }
+  body:has(.chat-workspace) .nav { justify-content: flex-end; flex-wrap: nowrap; gap: 0; }
+  body:has(.chat-workspace) .nav a { padding: 8px; font-size: 13px; }
+  body:has(.chat-workspace) .nav a:nth-child(2),
+  body:has(.chat-workspace) .nav a:nth-child(4) { display: none; }
+  body:has(.chat-workspace) .identity-summary { grid-column: 1 / -1; justify-content: flex-end; font-size: 11px; }
+  body:has(.chat-workspace) .identity-summary a { padding: 4px 8px; }
+  .chat-workspace .waiting-room { padding: 20px 18px; }
+  .chat-workspace .waiting-room h2 { margin: 12px 0 8px; }
+  .chat-workspace .waiting-room p { font-size: 14px; line-height: 1.5; }
+  .chat-workspace .waiting-symbol { width: 80px; height: 52px; margin-bottom: 14px; font-size: 20px; }
+  .chat-workspace .presence-check { margin: 18px 0 10px; font-size: 12px; }
+  .chat-workspace .waiting-room .helptext { font-size: 12px; }
+}
+
+.chat-workspace .messages-list {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.chat-workspace .draft-recovery { scroll-margin-top: 170px; }
+
+.chat-workspace .handoff-card > .eyebrow,
+.chat-workspace .handoff-card > h2,
+.chat-workspace .handoff-card > .handoff-summary { margin: 0; }
+.chat-workspace .handoff-summary { font-size: 14px; line-height: 1.5; }
+.chat-workspace .meetup-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.chat-workspace [data-logistics-window] { margin: 0; }
+
+.chat-room-title .chat-current-meeting { margin-top: 4px; }
+.chat-room-title .chat-current-meeting strong { color: var(--ink); }
+.chat-js-notice {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fffaf2;
+  font-size: 14px;
+  line-height: 1.5;
+}

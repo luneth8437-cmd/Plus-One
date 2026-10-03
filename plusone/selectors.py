@@ -87,9 +87,13 @@ def dashboard_context_for_user(user):
         Match.objects.filter(Q(poster=user) | Q(swiper=user))
         .select_related("post", "poster", "swiper", "post__location")
     )
+    from plusone.services.meetups import _effective_times
+    for match in matches:
+        match.meetup_finished = bool(match.status == Match.Status.AGREED and not match.meetup_cancelled_at and _effective_times(match)[1] <= now)
     open_matches = [match for match in matches if match.status in Match.LIVE_STATUSES]
-    handoff_matches = [match for match in matches if match.status == Match.Status.AGREED]
-    closed_matches = [match for match in matches if match.status in {Match.Status.DECLINED, Match.Status.EXPIRED}]
+    handoff_matches = [match for match in matches if match.status == Match.Status.AGREED and not match.meetup_cancelled_at and not match.meetup_finished]
+    finished_matches = [match for match in matches if match.meetup_finished]
+    closed_matches = [match for match in matches if match.status in {Match.Status.DECLINED, Match.Status.EXPIRED} or match.meetup_cancelled_at or match.meetup_finished]
 
     return {
         "active_posts": active_posts,
@@ -99,6 +103,7 @@ def dashboard_context_for_user(user):
         "handoff_count": len(handoff_matches),
         "open_matches": open_matches,
         "handoff_matches": handoff_matches,
+        "finished_matches": finished_matches,
         "closed_matches": closed_matches,
         "dashboard_state": dashboard_state(active_posts, open_matches, handoff_matches),
         "expired_posts": expired_posts,
@@ -132,7 +137,7 @@ def dashboard_state(active_posts, open_matches, handoff_matches):
             "tone": "handoff",
             "eyebrow": "Ready to meet",
             "title": match.post.title,
-            "body": f"Both people agreed. Meet at {match.post.location.name}.",
+            "body": f"Both people agreed. Meet at {match.meeting_point or match.post.location.name}.",
             "deadline": None,
         }
     return {

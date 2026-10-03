@@ -120,7 +120,7 @@
           <a class="dashboard-web-row match-row-web type-{{ match.post.activity_type }}" href="{% url 'chat' match.id %}">
             <div class="dashboard-row-main">
               <strong>{{ match.post.title }}</strong>
-              <span>{{ match.post.location.name }} | {{ match.post.start_time|date:"M j, H:i" }}{% if match.post.expected_end_time %}–{{ match.post.expected_end_time|date:"M j, H:i" }}{% endif %}</span>
+              <span>{{ match.meeting_point|default:match.post.location.name }} | {% if match.plan_meeting_at %}{{ match.plan_meeting_at|date:"M j, H:i" }}{% else %}{{ match.post.start_time|date:"M j, H:i" }}{% endif %}{% if match.plan_expected_end_at %}–{{ match.plan_expected_end_at|date:"M j, H:i" }}{% elif match.post.expected_end_time %}–{{ match.post.expected_end_time|date:"M j, H:i" }}{% endif %}</span>
             </div>
             <span class="teal-pill handoff-pill">View handoff</span>
           </a>
@@ -143,9 +143,13 @@
           <a class="dashboard-web-row muted type-{{ match.post.activity_type }}" href="{% url 'chat' match.id %}">
             <div class="dashboard-row-main">
               <strong>{{ match.post.title }}</strong>
-              <span>{{ match.get_status_display }} | {{ match.post.location.name }}</span>
+              <span>{% if match.meetup_cancelled_at %}Meetup cancelled{% elif match.meetup_finished %}Meeting window ended{% else %}{{ match.get_status_display }}{% endif %} | {{ match.meeting_point|default:match.post.location.name }}</span>
             </div>
-            {% if match.status == "declined" %}
+            {% if match.meetup_cancelled_at %}
+              <span class="teal-pill muted-pill">Meetup cancelled</span>
+            {% elif match.meetup_finished %}
+              <span class="teal-pill muted-pill">View plan and feedback</span>
+            {% elif match.status == "declined" %}
               <span class="teal-pill muted-pill">Declined</span>
             {% else %}
               <span class="teal-pill muted-pill">Chat ended</span>
